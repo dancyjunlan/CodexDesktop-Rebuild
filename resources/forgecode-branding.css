@@ -1,0 +1,39 @@
+:root {
+  --forgecode-mint: #6ee7c1;
+  --forgecode-coral: #ff7a59;
+  --forgecode-ink: #17231f;
+}
+
+.startup-loader__logo {
+  background: url("./forgecode-mark.svg") center / contain no-repeat !important;
+  animation: none !important;
+  opacity: 1 !important;
+}
+
+.startup-loader__base,
+.startup-loader__overlay {
+  display: none !important;
+}
+
+[data-forgecode-brand]::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin-right: 8px;
+  vertical-align: -4px;
+  background: url("./forgecode-mark.svg") center / contain no-repeat;
+}
+
+[data-forgecode-hide-workspace-name] {
+  display: none !important;
+}
+
+[data-forgecode-workspace-selector] {
+  cursor: default !important;
+}
+
+[data-forgecode-workspace-selector] svg {
+  display: none !important;
+}

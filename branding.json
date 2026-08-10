@@ -1,0 +1,10 @@
+{
+  "appName": "ForgeCode",
+  "packageName": "forgecode-desktop",
+  "author": "ForgeCode Studio",
+  "description": "A focused desktop workspace for coding with AI.",
+  "devAppName": "ForgeCode (Dev)",
+  "databaseFileName": "forgecode.db",
+  "devDatabaseFileName": "forgecode-dev.db",
+  "copyright": "Copyright (c) ForgeCode Studio"
+}

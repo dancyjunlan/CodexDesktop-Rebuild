@@ -1,8 +1,8 @@
 {
-  "name": "codex-rebuild",
-  "productName": "Codex",
+  "name": "forgecode-desktop",
+  "productName": "ForgeCode",
   "version": "26.803.41515",
-  "description": "Codex Electron App - Cross-platform Build",
+  "description": "ForgeCode desktop app",
   "main": "src/.vite/build/bootstrap.js",
   "scripts": {
     "start": "node scripts/start-dev.js",
@@ -25,7 +25,8 @@
     "sync": "node scripts/sync-upstream.js",
     "check-update": "node scripts/check-update.js",
     "bump-version": "node scripts/bump-version.js",
-    "rebuild:native": "electron-rebuild"
+    "rebuild:native": "electron-rebuild",
+    "brand:assets": "node scripts/generate-brand-assets.js"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.10.2",
@@ -40,7 +41,7 @@
     "@electron/fuses": "^1.8.0",
     "@electron/rebuild": "^3.7.1",
     "acorn": "^8.16.0",
-    "electron": "^42.0.1",
+    "electron": "42.3.0",
     "fast-xml-parser": "^5.5.9"
   },
   "dependencies": {

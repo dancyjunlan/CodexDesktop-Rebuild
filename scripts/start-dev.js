@@ -76,9 +76,10 @@ const candidates = [
 const cliPath = candidates.find(p => fs.existsSync(p));
 
 // Verify CLI exists
-if (!fs.existsSync(cliPath)) {
-  console.error(`CLI not found at: ${cliPath}`);
-  console.error('Tried: resources/bin/ and node_modules/@cometix/codex/vendor/');
+if (!cliPath) {
+  console.error('Codex CLI binary was not found.');
+  console.error('Run `npm run sync -- --force --skip-mac` to extract the Windows app and CLI.');
+  console.error('Also checked: node_modules/@cometix/codex/vendor/ and resources/bin/.');
   process.exit(1);
 }
 
@@ -90,13 +91,22 @@ console.log(`[start-dev] Platform: ${platform}, Arch: ${arch}`);
 console.log(`[start-dev] CLI Path: ${cliPath}`);
 console.log(`[start-dev] App Root: ${appEntry}`);
 
-// Launch Electron with CLI path
-const electronBin = require('electron');
+// The Windows app's native modules are built for the upstream Owl Electron
+// runtime. Its actual host is ChatGPT.exe; Codex.exe is only a small launcher.
+const upstreamRuntime = platform === 'win32'
+  ? path.join(__dirname, '..', 'src', srcPlatform, 'runtime', 'ChatGPT.exe')
+  : null;
+const electronBin = upstreamRuntime && fs.existsSync(upstreamRuntime)
+  ? upstreamRuntime
+  : require('electron');
+console.log(`[start-dev] Runtime: ${electronBin}`);
 const child = spawn(electronBin, [appEntry], {
   cwd: path.join(__dirname, '..'),
   stdio: 'inherit',
   env: {
     ...process.env,
+    // Keep ForgeCode settings and SQLite state independent from Codex.
+    CODEX_HOME: process.env.CODEX_HOME || path.join(os.homedir(), '.forgecode'),
     CODEX_CLI_PATH: cliPath,
     BUILD_FLAVOR: process.env.BUILD_FLAVOR || 'dev',
     ELECTRON_RENDERER_URL: process.env.ELECTRON_RENDERER_URL || 'app://-/index.html',

@@ -105,6 +105,43 @@ function copyRecursive(src, dest) {
   return count;
 }
 
+/**
+ * Older Windows 7-Zip versions preserve `%40` in MSIX member paths instead of
+ * decoding it to `@`. ASAR then cannot resolve unpacked scoped dependencies.
+ */
+function repairEncodedScopeDirectories(root) {
+  if (!fs.existsSync(root)) return 0;
+
+  const directories = [];
+  const collect = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const child = path.join(dir, entry.name);
+      directories.push(child);
+      collect(child);
+    }
+  };
+
+  collect(root);
+  let repaired = 0;
+
+  // Rename deepest paths first so parent directory renames do not invalidate them.
+  directories.sort((a, b) => b.length - a.length);
+  for (const dir of directories) {
+    const base = path.basename(dir);
+    if (!/%40/i.test(base)) continue;
+
+    const corrected = base.replace(/%40/gi, "@");
+    const target = path.join(path.dirname(dir), corrected);
+    if (!fs.existsSync(target)) {
+      fs.renameSync(dir, target);
+      repaired++;
+    }
+  }
+
+  return repaired;
+}
+
 function clearDir(dir) {
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
   fs.mkdirSync(dir, { recursive: true });
@@ -208,6 +245,8 @@ async function syncWin(destDir) {
   }
 
   assembleOutput(resourcesDir, destDir, "Windows");
+  const runtimeFiles = copyWindowsRuntime(path.dirname(resourcesDir), destDir);
+  console.log(`   [runtime] ${runtimeFiles} Windows Electron runtime files`);
   return info;
 }
 
@@ -222,6 +261,12 @@ function assembleOutput(resourcesDir, destDir, label) {
 
   // 1. Extract app.asar → _asar/ (for patching)
   const asarDest = path.join(destDir, "_asar");
+  const repairedScopes = repairEncodedScopeDirectories(
+    path.join(resourcesDir, "app.asar.unpacked"),
+  );
+  if (repairedScopes > 0) {
+    console.log(`   [path repair] decoded ${repairedScopes} scoped dependency path(s)`);
+  }
   console.log("   [asar extract] -> _asar/");
   execSync(`npx asar extract "${asarPath}" "${asarDest}"`);
 
@@ -246,6 +291,32 @@ function assembleOutput(resourcesDir, destDir, label) {
 
   const total = countFiles(destDir);
   console.log(`   [ok] ${total} files total`);
+}
+
+/**
+ * The Windows app's native modules link against the upstream `chrome.dll`.
+ * Keep the original Electron shell next to the extracted app for development;
+ * the npm Electron package uses a monolithic executable and cannot load them.
+ */
+function copyWindowsRuntime(appDir, destDir) {
+  const runtimeDir = path.join(destDir, "runtime");
+  clearDir(runtimeDir);
+
+  let copied = 0;
+  for (const entry of fs.readdirSync(appDir, { withFileTypes: true })) {
+    // The original app.asar is separately extracted into destDir/_asar.
+    if (entry.name === "resources") continue;
+
+    const source = path.join(appDir, entry.name);
+    const destination = path.join(runtimeDir, entry.name);
+    if (entry.isDirectory()) copied += copyRecursive(source, destination);
+    else if (!entry.isSymbolicLink()) {
+      fs.copyFileSync(source, destination);
+      copied++;
+    }
+  }
+
+  return copied;
 }
 
 function findResourcesDir(extractDir) {

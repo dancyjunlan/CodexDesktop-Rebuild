@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ForgeCode">
+  <rect width="512" height="512" rx="96" fill="#17231f"/>
+  <path fill="#6ee7c1" d="M110 104h118l58 64-58 62h-58v178l-60-42z"/>
+  <path fill="#ff7a59" d="M228 104h180v68H280zM228 224h132v64H228z"/>
+</svg>

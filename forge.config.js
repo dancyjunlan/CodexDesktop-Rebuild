@@ -4,10 +4,10 @@ const fs = require("fs");
 
 module.exports = {
   packagerConfig: {
-    name: "Codex",
-    executableName: "Codex",
-    appBundleId: "com.openai.codex",
-    icon: "./resources/electron",
+    name: "ForgeCode",
+    executableName: "ForgeCode",
+    appBundleId: "studio.forgecode.desktop",
+    icon: "./resources/forgecode",
     // Build mode is set by prepare-src.js via src/.build-mode marker file.
     // "upstream-asar": mac/win — we provide pre-built app.asar, forge skips ASAR packing.
     // "linux": forge packs ASAR from src/ content (needs electron-rebuild).
@@ -49,32 +49,31 @@ module.exports = {
       teamId: process.env.APPLE_TEAM_ID,
     },
     win32metadata: {
-      CompanyName: "OpenAI",
-      ProductName: "Codex",
+      CompanyName: "ForgeCode Studio",
+      ProductName: "ForgeCode",
     },
   },
   rebuildConfig: {},
   makers: [
-    { name: "@electron-forge/maker-dmg", config: { format: "ULFO", icon: "./resources/electron.icns" } },
+    { name: "@electron-forge/maker-dmg", config: { format: "ULFO", icon: "./resources/forgecode.icns" } },
     { name: "@electron-forge/maker-zip", platforms: ["darwin"] },
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "Codex",
-        authors: "OpenAI, Cometix Space",
-        description: "Codex Desktop App",
-        setupIcon: "./resources/electron.ico",
-        iconUrl: "https://raw.githubusercontent.com/Haleclipse/CodexDesktop-Rebuild/master/resources/electron.ico",
+        name: "ForgeCode",
+        authors: "ForgeCode Studio",
+        description: "ForgeCode desktop app",
+        setupIcon: "./resources/forgecode.ico",
       },
     },
     { name: "@electron-forge/maker-zip", platforms: ["win32"] },
     {
       name: "@electron-forge/maker-deb",
-      config: { options: { name: "codex", productName: "Codex", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "Codex", maintainer: "Cometix Space", homepage: "https://github.com/Haleclipse/CodexDesktop-Rebuild", icon: "./resources/electron.png" } },
+      config: { options: { name: "forgecode", productName: "ForgeCode", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "ForgeCode", maintainer: "ForgeCode Studio", icon: "./resources/forgecode.png" } },
     },
     {
       name: "@electron-forge/maker-rpm",
-      config: { options: { name: "codex", productName: "Codex", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "Codex", license: "Apache-2.0", homepage: "https://github.com/Haleclipse/CodexDesktop-Rebuild", icon: "./resources/electron.png" } },
+      config: { options: { name: "forgecode", productName: "ForgeCode", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "ForgeCode", license: "Apache-2.0", icon: "./resources/forgecode.png" } },
     },
     { name: "@electron-forge/maker-zip", platforms: ["linux"] },
   ],
