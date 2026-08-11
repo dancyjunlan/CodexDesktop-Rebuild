@@ -98,13 +98,19 @@ function patchMainProcess(platform) {
   let bootstrap = fs.readFileSync(bootstrapPath, "utf-8");
   const appNameForBuildFlavor = "n===`dev`?`" + config.devAppName + "`:`" + config.appName + "`";
   const appNameForResolvedFlavor = "Z===`dev`?`" + config.devAppName + "`:`" + config.appName + "`";
+  const previousAppNameForBuildFlavor = "n===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
+  const previousAppNameForResolvedFlavor = "Z===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
   if (bootstrap.includes("t.Ta(n)")) {
     bootstrap = replaceExact(bootstrap, "t.Ta(n)", appNameForBuildFlavor, "user-data app name", bootstrapPath);
+  } else if (bootstrap.includes(previousAppNameForBuildFlavor)) {
+    bootstrap = replaceExact(bootstrap, previousAppNameForBuildFlavor, appNameForBuildFlavor, "previous user-data app name", bootstrapPath);
   } else if (!bootstrap.includes(appNameForBuildFlavor)) {
     throw new Error(`${relPath(bootstrapPath)}: user-data app name was not recognized`);
   }
   if (bootstrap.includes("t.Ta(Z,Q)")) {
     bootstrap = replaceExact(bootstrap, "t.Ta(Z,Q)", appNameForResolvedFlavor, "application name", bootstrapPath);
+  } else if (bootstrap.includes(previousAppNameForResolvedFlavor)) {
+    bootstrap = replaceExact(bootstrap, previousAppNameForResolvedFlavor, appNameForResolvedFlavor, "previous application name", bootstrapPath);
   } else if (!bootstrap.includes(appNameForResolvedFlavor)) {
     throw new Error(`${relPath(bootstrapPath)}: application name was not recognized`);
   }
