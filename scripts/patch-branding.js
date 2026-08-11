@@ -7,6 +7,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 const { SRC_DIR, PROJECT_ROOT, relPath } = require("./patch-util");
 
 const config = JSON.parse(
@@ -15,6 +16,7 @@ const config = JSON.parse(
 const RESOURCE_DIR = path.join(PROJECT_ROOT, "resources");
 const MARK_SOURCE = path.join(RESOURCE_DIR, "aigeek-mark.png");
 const SHATTER_SOURCE = path.join(RESOURCE_DIR, "aigeek-logo-shatter.gif");
+const WINDOWS_ICON_SOURCE = path.join(RESOURCE_DIR, "forgecode.ico");
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
 const BLOCK_START = "<!-- FORGECODE_BRANDING_START -->";
@@ -143,6 +145,36 @@ function patchMainProcess(platform) {
   writeIfChanged(sqlitePath, sqlite);
 
   return [relPath(bootstrapPath), relPath(sqlitePath)];
+}
+
+function patchWindowsRuntimeIcon(platform) {
+  if (platform !== "win") return null;
+
+  const runtimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
+  const rceditExe = path.join(
+    PROJECT_ROOT,
+    "node_modules",
+    "electron-winstaller",
+    "vendor",
+    "rcedit.exe",
+  );
+  if (!fs.existsSync(runtimeExe) || !fs.existsSync(rceditExe)) {
+    throw new Error("win: runtime icon tooling was not found");
+  }
+
+  try {
+    execFileSync(rceditExe, [runtimeExe, "--set-icon", WINDOWS_ICON_SOURCE], {
+      stdio: "pipe",
+    });
+  } catch (error) {
+    const details = error.stderr?.toString("utf-8") ?? "";
+    if (details.includes("Unable to commit changes")) {
+      console.warn("  [win] runtime icon pending: close AIGeek and run the dev command again");
+      return null;
+    }
+    throw error;
+  }
+  return relPath(runtimeExe);
 }
 
 function patchOnboarding(platform) {
@@ -300,6 +332,8 @@ function main() {
     for (const filePath of patchMainProcess(target)) {
       console.log(`  [${target}] ${filePath}`);
     }
+    const runtimeIconPath = patchWindowsRuntimeIcon(target);
+    if (runtimeIconPath) console.log(`  [${target}] ${runtimeIconPath}`);
     console.log(`  [${target}] ${patchOnboarding(target)}`);
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
     console.log(`  [${target}] ${patchLocaleBrandCopy(target)}`);

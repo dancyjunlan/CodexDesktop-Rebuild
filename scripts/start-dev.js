@@ -4,7 +4,7 @@
  * Automatically detects system architecture and sets correct CLI path
  */
 
-const { spawn } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -86,6 +86,15 @@ if (!cliPath) {
 // Resolve app entry: prefer platform-specific _asar/ (has its own package.json)
 const appRoot = path.join(__dirname, '..', 'src', srcPlatform, '_asar');
 const appEntry = fs.existsSync(appRoot) ? appRoot : path.join(__dirname, '..');
+
+// Apply the branding before the Windows runtime is opened so its taskbar icon
+// is refreshed whenever the development app is launched after a full exit.
+if (platform === 'win32' && fs.existsSync(appRoot)) {
+  execFileSync(process.execPath, [path.join(__dirname, 'patch-branding.js'), srcPlatform], {
+    cwd: path.join(__dirname, '..'),
+    stdio: 'inherit',
+  });
+}
 
 console.log(`[start-dev] Platform: ${platform}, Arch: ${arch}`);
 console.log(`[start-dev] CLI Path: ${cliPath}`);
