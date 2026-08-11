@@ -89,12 +89,17 @@ function replaceExact(source, search, replacement, label, filePath) {
 function patchMainProcess(platform) {
   const buildDir = path.join(SRC_DIR, platform, "_asar", ".vite", "build");
   const bootstrapName = fs.readdirSync(buildDir).find((file) => /^bootstrap-.*\.js$/.test(file));
+  const mainName = fs.readdirSync(buildDir).find((file) => {
+    if (!/^main-.*\.js$/.test(file)) return false;
+    const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
+    return source.includes("windowIconPath:j,globalState");
+  });
   const sqliteName = fs.readdirSync(buildDir).find((file) => {
     if (!/^src-.*\.js$/.test(file)) return false;
     const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
     return source.includes("`codex-dev.db`") || source.includes("`" + config.devDatabaseFileName + "`");
   });
-  if (!bootstrapName || !sqliteName) {
+  if (!bootstrapName || !mainName || !sqliteName) {
     throw new Error(`${platform}: could not locate main-process branding bundles`);
   }
 
@@ -134,6 +139,23 @@ function patchMainProcess(platform) {
   }
   writeIfChanged(bootstrapPath, bootstrap);
 
+  const mainPath = path.join(buildDir, mainName);
+  let main = fs.readFileSync(mainPath, "utf-8");
+  const upstreamWindowIconPath = "j=process.platform===`linux`?G5(i,e,T):null";
+  const brandedWindowIconPath = "j=process.platform===`linux`?G5(i,e,T):process.platform===`win32`?(0,p.join)(process.resourcesPath,`aigeek.ico`):null";
+  if (main.includes(upstreamWindowIconPath)) {
+    main = replaceExact(
+      main,
+      upstreamWindowIconPath,
+      brandedWindowIconPath,
+      "Windows window icon path",
+      mainPath,
+    );
+  } else if (!main.includes(brandedWindowIconPath)) {
+    throw new Error(`${relPath(mainPath)}: Windows window icon path was not recognized`);
+  }
+  writeIfChanged(mainPath, main);
+
   const sqlitePath = path.join(buildDir, sqliteName);
   let sqlite = fs.readFileSync(sqlitePath, "utf-8");
   const upstreamProdCount = sqlite.split("`codex.db`").length - 1;
@@ -158,13 +180,16 @@ function patchMainProcess(platform) {
   }
   writeIfChanged(sqlitePath, sqlite);
 
-  return [relPath(bootstrapPath), relPath(sqlitePath)];
+  return [relPath(bootstrapPath), relPath(mainPath), relPath(sqlitePath)];
 }
 
 function patchWindowsRuntimeIcon(platform) {
   if (platform !== "win") return null;
 
   const runtimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
+  const runtimeResourcesDir = path.join(SRC_DIR, "win", "runtime", "resources");
+  const packagedResourcesIcon = path.join(SRC_DIR, "win", "aigeek.ico");
+  const runtimeResourcesIcon = path.join(runtimeResourcesDir, "aigeek.ico");
   const rceditExe = path.join(
     PROJECT_ROOT,
     "node_modules",
@@ -175,6 +200,12 @@ function patchWindowsRuntimeIcon(platform) {
   if (!fs.existsSync(runtimeExe) || !fs.existsSync(rceditExe)) {
     throw new Error("win: runtime icon tooling was not found");
   }
+
+  // BrowserWindow loads this path for both the unpackaged runtime and a Forge
+  // package. The latter receives src/win/aigeek.ico through packageAfterCopy.
+  fs.mkdirSync(runtimeResourcesDir, { recursive: true });
+  fs.copyFileSync(WINDOWS_ICON_SOURCE, runtimeResourcesIcon);
+  fs.copyFileSync(WINDOWS_ICON_SOURCE, packagedResourcesIcon);
 
   try {
     execFileSync(rceditExe, [runtimeExe, "--set-icon", WINDOWS_ICON_SOURCE], {
