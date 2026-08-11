@@ -6,8 +6,8 @@
   // Match both states so it remains a fixed ForgeCode product label.
   const workspaceSelectorNames = new Set(["Work", "工作", appName]);
   const textReplacements = new Map([
-    ["Use ChatGPT Work", "Use ForgeCode"],
-    ["使用 ChatGPT Work", "使用 ForgeCode"],
+    ["Use ChatGPT Work", `Use ${appName}`],
+    ["使用 ChatGPT Work", `使用 ${appName}`],
   ]);
   let scheduled = false;
 
