@@ -102,6 +102,9 @@ function patchMainProcess(platform) {
   let bootstrap = fs.readFileSync(bootstrapPath, "utf-8");
   const appNameForBuildFlavor = "n===`dev`?`" + config.devAppName + "`:`" + config.appName + "`";
   const appNameForResolvedFlavor = "Z===`dev`?`" + config.devAppName + "`:`" + config.appName + "`";
+  const upstreamAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(i.i(Z))";
+  const brandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`"
+    + config.windowsAppUserModelId + ".dev`:`" + config.windowsAppUserModelId + "`)";
   const previousAppNameForBuildFlavor = "n===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
   const previousAppNameForResolvedFlavor = "Z===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
   if (bootstrap.includes("t.Ta(n)")) {
@@ -117,6 +120,17 @@ function patchMainProcess(platform) {
     bootstrap = replaceExact(bootstrap, previousAppNameForResolvedFlavor, appNameForResolvedFlavor, "previous application name", bootstrapPath);
   } else if (!bootstrap.includes(appNameForResolvedFlavor)) {
     throw new Error(`${relPath(bootstrapPath)}: application name was not recognized`);
+  }
+  if (bootstrap.includes(upstreamAppUserModelId)) {
+    bootstrap = replaceExact(
+      bootstrap,
+      upstreamAppUserModelId,
+      brandedAppUserModelId,
+      "Windows AppUserModelID",
+      bootstrapPath,
+    );
+  } else if (!bootstrap.includes(brandedAppUserModelId)) {
+    throw new Error(`${relPath(bootstrapPath)}: Windows AppUserModelID was not recognized`);
   }
   writeIfChanged(bootstrapPath, bootstrap);
 

@@ -4,9 +4,9 @@ const fs = require("fs");
 
 module.exports = {
   packagerConfig: {
-    name: "ForgeCode",
-    executableName: "ForgeCode",
-    appBundleId: "studio.forgecode.desktop",
+    name: "AIGeek",
+    executableName: "AIGeek",
+    appBundleId: "studio.aigeek.desktop",
     icon: "./resources/forgecode",
     // Build mode is set by prepare-src.js via src/.build-mode marker file.
     // "upstream-asar": mac/win — we provide pre-built app.asar, forge skips ASAR packing.
@@ -49,8 +49,8 @@ module.exports = {
       teamId: process.env.APPLE_TEAM_ID,
     },
     win32metadata: {
-      CompanyName: "ForgeCode Studio",
-      ProductName: "ForgeCode",
+      CompanyName: "AIGeek Studio",
+      ProductName: "AIGeek",
     },
   },
   rebuildConfig: {},
@@ -60,20 +60,20 @@ module.exports = {
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "ForgeCode",
-        authors: "ForgeCode Studio",
-        description: "ForgeCode desktop app",
+        name: "AIGeek",
+        authors: "AIGeek Studio",
+        description: "AIGeek desktop app",
         setupIcon: "./resources/forgecode.ico",
       },
     },
     { name: "@electron-forge/maker-zip", platforms: ["win32"] },
     {
       name: "@electron-forge/maker-deb",
-      config: { options: { name: "forgecode", productName: "ForgeCode", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "ForgeCode", maintainer: "ForgeCode Studio", icon: "./resources/forgecode.png" } },
+      config: { options: { name: "aigeek", productName: "AIGeek", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "AIGeek", maintainer: "AIGeek Studio", icon: "./resources/forgecode.png" } },
     },
     {
       name: "@electron-forge/maker-rpm",
-      config: { options: { name: "forgecode", productName: "ForgeCode", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "ForgeCode", license: "Apache-2.0", icon: "./resources/forgecode.png" } },
+      config: { options: { name: "aigeek", productName: "AIGeek", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "AIGeek", license: "Apache-2.0", icon: "./resources/forgecode.png" } },
     },
     { name: "@electron-forge/maker-zip", platforms: ["linux"] },
   ],
