@@ -13,7 +13,7 @@ const config = JSON.parse(
   fs.readFileSync(path.join(PROJECT_ROOT, "branding.json"), "utf-8"),
 );
 const RESOURCE_DIR = path.join(PROJECT_ROOT, "resources");
-const MARK_SOURCE = path.join(RESOURCE_DIR, "forgecode-mark.svg");
+const MARK_SOURCE = path.join(RESOURCE_DIR, "aigeek-mark.png");
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
 const BLOCK_START = "<!-- FORGECODE_BRANDING_START -->";
@@ -64,7 +64,7 @@ function patchWebview(platform) {
     : index.replace("</head>", `${brandingBlock}\n  </head>`);
   writeIfChanged(indexPath, index);
 
-  fs.copyFileSync(MARK_SOURCE, path.join(webviewDir, "forgecode-mark.svg"));
+  fs.copyFileSync(MARK_SOURCE, path.join(webviewDir, "aigeek-mark.png"));
   fs.copyFileSync(STYLE_SOURCE, path.join(webviewDir, "forgecode-branding.css"));
   const script = fs
     .readFileSync(SCRIPT_SOURCE, "utf-8")
@@ -181,14 +181,16 @@ function patchWebviewStartupLogo(platform) {
   const appInitialPath = path.join(assetsDir, appInitialName);
   let source = fs.readFileSync(appInitialPath, "utf-8");
   const upstreamIcon = "a=r===void 0?dg:r";
-  const brandedIcon = "a=r===void 0?e=>(0,pir.jsx)(`img`,{src:`./forgecode-mark.svg`,alt:``,\"data-forgecode-startup-icon\":!0,...e}):r";
+  const brandedIcon = "a=r===void 0?e=>(0,pir.jsx)(`img`,{src:`./aigeek-mark.png`,alt:``,\"data-forgecode-startup-icon\":!0,...e}):r";
   const upstreamMask = "o=i===void 0?mir:i";
-  const brandedMask = "o=i===void 0?`./forgecode-mark.svg`:i";
+  const brandedMask = "o=i===void 0?`./aigeek-mark.png`:i";
 
   if (source.includes(upstreamIcon)) {
     source = replaceExact(source, upstreamIcon, brandedIcon, "webview startup icon", appInitialPath);
     source = replaceExact(source, upstreamMask, brandedMask, "webview startup mask", appInitialPath);
-  } else if (!source.includes("data-forgecode-startup-icon")) {
+  } else if (source.includes("data-forgecode-startup-icon")) {
+    source = source.replaceAll("./forgecode-mark.svg", "./aigeek-mark.png");
+  } else {
     throw new Error(`${relPath(appInitialPath)}: webview startup logo was not recognized`);
   }
   writeIfChanged(appInitialPath, source);

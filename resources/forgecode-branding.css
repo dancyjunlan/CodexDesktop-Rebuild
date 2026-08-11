@@ -5,7 +5,7 @@
 }
 
 .startup-loader__logo {
-  background: url("./forgecode-mark.svg") center / contain no-repeat !important;
+  background: url("./aigeek-mark.png") center / contain no-repeat !important;
   animation: none !important;
   opacity: 1 !important;
 }
@@ -23,7 +23,7 @@
   flex: 0 0 18px;
   margin-right: 8px;
   vertical-align: -4px;
-  background: url("./forgecode-mark.svg") center / contain no-repeat;
+  background: url("./aigeek-mark.png") center / contain no-repeat;
 }
 
 [data-forgecode-hide-workspace-name] {

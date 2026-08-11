@@ -1,10 +1,10 @@
 {
-  "appName": "ForgeCode",
+  "appName": "AIGeek",
   "packageName": "forgecode-desktop",
-  "author": "ForgeCode Studio",
+  "author": "AIGeek Studio",
   "description": "A focused desktop workspace for coding with AI.",
-  "devAppName": "ForgeCode (Dev)",
+  "devAppName": "AIGeek (Dev)",
   "databaseFileName": "forgecode.db",
   "devDatabaseFileName": "forgecode-dev.db",
-  "copyright": "Copyright (c) ForgeCode Studio"
+  "copyright": "Copyright (c) AIGeek Studio"
 }
