@@ -2,7 +2,9 @@
   const appName = "__FORGECODE_NAME__";
   const exactNames = new Set(["Codex", "OpenAI Codex", "Codex (Dev)"]);
   const hiddenWorkspaceNames = new Set(["ChatGPT Work"]);
-  const workspaceSelectorNames = new Set(["Work", "工作"]);
+  // React may recreate the selector after its label has already been branded.
+  // Match both states so it remains a fixed ForgeCode product label.
+  const workspaceSelectorNames = new Set(["Work", "工作", appName]);
   const textReplacements = new Map([
     ["Use ChatGPT Work", "Use ForgeCode"],
     ["使用 ChatGPT Work", "使用 ForgeCode"],
