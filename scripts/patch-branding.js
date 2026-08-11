@@ -116,6 +116,8 @@ function patchMainProcess(platform) {
   const upstreamAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(i.i(Z))";
   const brandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`"
     + config.windowsAppUserModelId + ".dev`:`" + config.windowsAppUserModelId + "`)";
+  const upstreamSingleInstanceExit = "if(!(!$||a.app.requestSingleInstanceLock()))";
+  const brandedSingleInstanceExit = "if(!(!$||!0))";
   const previousAppNameForBuildFlavor = "n===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
   const previousAppNameForResolvedFlavor = "Z===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
   if (bootstrap.includes("t.Ta(n)")) {
@@ -142,6 +144,17 @@ function patchMainProcess(platform) {
     );
   } else if (!bootstrap.includes(brandedAppUserModelId)) {
     throw new Error(`${relPath(bootstrapPath)}: Windows AppUserModelID was not recognized`);
+  }
+  if (bootstrap.includes(upstreamSingleInstanceExit)) {
+    bootstrap = replaceExact(
+      bootstrap,
+      upstreamSingleInstanceExit,
+      brandedSingleInstanceExit,
+      "single-instance exit branch",
+      bootstrapPath,
+    );
+  } else if (!bootstrap.includes(brandedSingleInstanceExit)) {
+    throw new Error(`${relPath(bootstrapPath)}: single-instance exit branch was not recognized`);
   }
   writeIfChanged(bootstrapPath, bootstrap);
 
