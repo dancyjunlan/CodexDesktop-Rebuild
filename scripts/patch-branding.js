@@ -14,6 +14,7 @@ const config = JSON.parse(
 );
 const RESOURCE_DIR = path.join(PROJECT_ROOT, "resources");
 const MARK_SOURCE = path.join(RESOURCE_DIR, "aigeek-mark.png");
+const SHATTER_SOURCE = path.join(RESOURCE_DIR, "aigeek-logo-shatter.gif");
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
 const BLOCK_START = "<!-- FORGECODE_BRANDING_START -->";
@@ -65,6 +66,7 @@ function patchWebview(platform) {
   writeIfChanged(indexPath, index);
 
   fs.copyFileSync(MARK_SOURCE, path.join(webviewDir, "aigeek-mark.png"));
+  fs.copyFileSync(SHATTER_SOURCE, path.join(webviewDir, "aigeek-logo-shatter.gif"));
   fs.copyFileSync(STYLE_SOURCE, path.join(webviewDir, "forgecode-branding.css"));
   const script = fs
     .readFileSync(SCRIPT_SOURCE, "utf-8")

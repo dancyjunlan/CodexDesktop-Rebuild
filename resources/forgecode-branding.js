@@ -11,6 +11,34 @@
   ]);
   let scheduled = false;
 
+  function replaceHomeBrandMark() {
+    const heading = Array.from(document.querySelectorAll("h1, h2")).find((element) => {
+      const text = (element.textContent || "").trim();
+      return /what should we build/i.test(text) || text.includes("\u6211\u4eec\u8be5\u6784\u5efa");
+    });
+    if (!heading) return;
+
+    const host = heading.parentElement;
+    if (!host || host.querySelector(":scope > .aigeek-home-mark")) return;
+
+    const siblings = Array.from(host.children);
+    const headingIndex = siblings.indexOf(heading);
+    const defaultMark = siblings
+      .slice(0, headingIndex)
+      .reverse()
+      .find((element) => element.matches("svg") || element.querySelector("svg"));
+    defaultMark?.setAttribute("data-aigeek-home-default-mark", "");
+
+    const mark = document.createElement("span");
+    mark.className = "aigeek-home-mark";
+    mark.setAttribute("aria-label", appName);
+    mark.innerHTML = [
+      '<img class="aigeek-home-mark-static" src="./aigeek-mark.png" alt="" />',
+      '<img class="aigeek-home-mark-shatter" src="./aigeek-logo-shatter.gif" alt="" />',
+    ].join("");
+    heading.before(mark);
+  }
+
   function replaceVisibleBranding(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
@@ -96,6 +124,7 @@
     scheduled = false;
     document.title = appName;
     replaceVisibleBranding(document.body);
+    replaceHomeBrandMark();
   }
 
   function scheduleRefresh() {

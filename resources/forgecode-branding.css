@@ -37,3 +37,53 @@
 [data-forgecode-workspace-selector] svg {
   display: none !important;
 }
+
+[data-aigeek-home-default-mark] {
+  display: none !important;
+}
+
+.aigeek-home-mark {
+  position: relative;
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  place-items: center;
+  cursor: default;
+}
+
+.aigeek-home-mark img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: opacity 120ms ease-out;
+}
+
+.aigeek-home-mark-static {
+  opacity: 1;
+}
+
+.aigeek-home-mark-shatter {
+  opacity: 0;
+  mix-blend-mode: screen;
+}
+
+.aigeek-home-mark:hover .aigeek-home-mark-static {
+  opacity: 0;
+}
+
+.aigeek-home-mark:hover .aigeek-home-mark-shatter {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aigeek-home-mark-shatter,
+  .aigeek-home-mark:hover .aigeek-home-mark-shatter {
+    display: none;
+  }
+
+  .aigeek-home-mark:hover .aigeek-home-mark-static {
+    opacity: 1;
+  }
+}
