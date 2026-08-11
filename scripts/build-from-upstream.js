@@ -133,6 +133,7 @@ async function createWindowsInstaller(appDirectory, version, iconPath) {
     name: "AIGeek",
     title: "AIGeek",
     version,
+    nuspecTemplate: path.join(PROJECT_ROOT, "resources", "aigeek.nuspectemplate"),
     setupIcon: iconPath,
     setupExe: "AIGeek-Setup.exe",
     noDelta: true,
