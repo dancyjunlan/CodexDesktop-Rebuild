@@ -43,6 +43,12 @@ function patchPackage(platform) {
   packageJson.productName = config.appName;
   packageJson.author = config.author;
   packageJson.description = config.description;
+  // The upstream MSIX advertises itself as the ChatGPT-branded OpenAI.Codex
+  // package. Keeping those values makes Windows route activation to an
+  // installed official Codex instance instead of this standalone application.
+  packageJson.codexAppBrand = "codex";
+  delete packageJson.codexWindowsPackageIdentity;
+  delete packageJson.codexWindowsPackagePublisher;
   writeIfChanged(packagePath, JSON.stringify(packageJson, null, 2) + "\n");
   return relPath(packagePath);
 }
