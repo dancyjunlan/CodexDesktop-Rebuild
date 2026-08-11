@@ -27,7 +27,11 @@ const TARGET_TRIPLE_MAP = {
 // ─── Helpers ────────────────────────────────────────────────────
 
 function clearDir(dir) {
-  if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
+  // Windows can briefly retain a directory handle after an archiver or virus
+  // scanner exits. Retry EPERM/EBUSY rather than failing a valid rebuild.
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+  }
   fs.mkdirSync(dir, { recursive: true });
 }
 
