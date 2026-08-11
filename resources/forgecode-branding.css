@@ -67,6 +67,8 @@
 .aigeek-home-mark-shatter {
   opacity: 0;
   mix-blend-mode: screen;
+  transform: scale(1.415);
+  transform-origin: center;
 }
 
 .aigeek-home-mark:hover .aigeek-home-mark-static {
