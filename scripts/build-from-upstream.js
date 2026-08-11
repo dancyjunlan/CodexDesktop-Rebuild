@@ -120,27 +120,73 @@ function setWindowsExecutableIcon(exePath, iconPath) {
   execFileSync(rceditExe, [exePath, "--set-icon", iconPath], { stdio: "pipe" });
 }
 
-async function createWindowsInstaller(appDirectory, version, iconPath) {
-  const installerDir = path.join(OUT_DIR, "installer");
-  clearDir(installerDir);
+function createIExpressInstaller(appDirectory) {
+  const stagingDir = path.join(OUT_DIR, "installer-staging");
+  const payloadPath = path.join(stagingDir, "aigeek-app.zip");
+  const installScriptPath = path.join(stagingDir, "install.cmd");
+  const sedPath = path.join(stagingDir, "aigeek-installer.sed");
+  const setupPath = path.join(OUT_DIR, "AIGeek-Setup.exe");
+  clearDir(stagingDir);
+  if (fs.existsSync(setupPath)) fs.rmSync(setupPath, { force: true });
 
-  await require("electron-winstaller").createWindowsInstaller({
-    appDirectory,
-    outputDirectory: installerDir,
-    authors: "AIGeek Studio",
-    description: "AIGeek desktop app",
-    exe: "AIGeek.exe",
-    name: "AIGeek",
-    title: "AIGeek",
-    version,
-    nuspecTemplate: path.join(PROJECT_ROOT, "resources", "aigeek.nuspectemplate"),
-    setupIcon: iconPath,
-    setupExe: "AIGeek-Setup.exe",
-    noDelta: true,
-    noMsi: true,
+  // IExpress accepts a compact payload. The installed files remain in a normal
+  // Electron directory so native DLL lookup and Chromium manifests work.
+  execFileSync("tar.exe", ["-a", "-c", "-f", payloadPath, "."], {
+    cwd: appDirectory,
+    stdio: "inherit",
   });
 
-  return path.join(installerDir, "AIGeek-Setup.exe");
+  const installScript = [
+    "@echo off",
+    "setlocal enableextensions",
+    "set \"AIGEEK_APP=%LOCALAPPDATA%\\AIGeek\\app\"",
+    "if not exist \"%AIGEEK_APP%\" mkdir \"%AIGEEK_APP%\"",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Expand-Archive -LiteralPath '%~dp0aigeek-app.zip' -DestinationPath '%AIGEEK_APP%' -Force\"",
+    "if errorlevel 1 exit /b 1",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$shell=New-Object -ComObject WScript.Shell; $link=$shell.CreateShortcut([Environment]::GetFolderPath('Desktop')+'\\AIGeek.lnk'); $link.TargetPath='%AIGEEK_APP%\\AIGeek.exe'; $link.WorkingDirectory='%AIGEEK_APP%'; $link.IconLocation='%AIGEEK_APP%\\AIGeek.exe,0'; $link.Save()\"",
+    "start \"\" \"%AIGEEK_APP%\\AIGeek.exe\"",
+    "exit /b 0",
+    "",
+  ].join("\r\n");
+  fs.writeFileSync(installScriptPath, installScript, "ascii");
+
+  const sed = [
+    "[Version]",
+    "Class=IEXPRESS",
+    "SEDVersion=3",
+    "[Options]",
+    "PackagePurpose=InstallApp",
+    "ShowInstallProgramWindow=0",
+    "HideExtractAnimation=0",
+    "UseLongFileName=1",
+    "InsideCompressed=1",
+    "CAB_FixedSize=0",
+    "CAB_ResvCodeSigning=0",
+    "RebootMode=N",
+    "InstallPrompt=",
+    "DisplayLicense=",
+    "FinishMessage=AIGeek has been installed and will now start.",
+    `TargetName=${setupPath}`,
+    "FriendlyName=AIGeek Setup",
+    "AppLaunched=install.cmd",
+    "PostInstallCmd=<None>",
+    "AdminQuietInstCmd=install.cmd",
+    "UserQuietInstCmd=install.cmd",
+    "SourceFiles=SourceFiles",
+    "[SourceFiles]",
+    `SourceFiles0=${stagingDir}\\`,
+    "[SourceFiles0]",
+    "%FILE0%=",
+    "%FILE1%=",
+    "[Strings]",
+    "FILE0=\"aigeek-app.zip\"",
+    "FILE1=\"install.cmd\"",
+    "",
+  ].join("\r\n");
+  fs.writeFileSync(sedPath, sed, "ascii");
+  execFileSync("iexpress.exe", ["/N", sedPath], { stdio: "inherit" });
+
+  return setupPath;
 }
 
 // ─── macOS build ────────────────────────────────────────────────
@@ -228,7 +274,7 @@ function buildMac(platform) {
 
 // ─── Windows build ──────────────────────────────────────────────
 
-async function buildWin(platform) {
+function buildWin(platform) {
   const platformDir = path.join(SRC_DIR, platform);
   const asarDir = path.join(platformDir, "_asar");
 
@@ -278,10 +324,10 @@ async function buildWin(platform) {
   // Replace codex CLI
   replaceCodex(platform, resourcesDir, "codex.exe");
 
-  // Create a distributable Squirrel installer instead of a portable ZIP.
-  const version = getVersion(asarDir);
+  // IExpress installs the actual Electron host directly, avoiding Squirrel's
+  // proxy executable which is incompatible with this upstream MSIX runtime.
   console.log("   [installer] creating AIGeek-Setup.exe");
-  const setupPath = await createWindowsInstaller(outApp, version, iconPath);
+  const setupPath = createIExpressInstaller(outApp);
   const sizeMB = (fs.statSync(setupPath).size / 1048576).toFixed(1);
   console.log(`   [ok] ${setupPath} (${sizeMB} MB)`);
 }
@@ -351,7 +397,7 @@ async function main() {
   if (platform.startsWith("mac")) {
     buildMac(platform);
   } else {
-    await buildWin(platform);
+    buildWin(platform);
   }
 }
 
