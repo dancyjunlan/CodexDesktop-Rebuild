@@ -17,9 +17,16 @@
     <file src="*.bin" target="lib\net45" />
     <file src="*.dll" target="lib\net45" />
     <file src="*.pak" target="lib\net45" />
+    <file src="*.manifest" target="lib\net45" />
     <file src="*.exe.config" target="lib\net45" />
     <file src="*.exe.sig" target="lib\net45" />
     <file src="icudtl.dat" target="lib\net45\icudtl.dat" />
+    <file src="owl-shell-runtime.json" target="lib\net45\owl-shell-runtime.json" />
+    <file src="chrome_proxy.exe" target="lib\net45\chrome_proxy.exe" />
+    <file src="chrome_pwa_launcher.exe" target="lib\net45\chrome_pwa_launcher.exe" />
+    <file src="elevated_tracing_service.exe" target="lib\net45\elevated_tracing_service.exe" />
+    <file src="elevation_service.exe" target="lib\net45\elevation_service.exe" />
+    <file src="notification_helper.exe" target="lib\net45\notification_helper.exe" />
     <file src="Squirrel.exe" target="lib\net45\squirrel.exe" />
     <file src="<%- exe %>" target="lib\net45\<%- exe %>" />
     <% additionalFiles.forEach(function(f) { %>
