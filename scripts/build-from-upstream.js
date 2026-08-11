@@ -143,11 +143,11 @@ function createIExpressInstaller(appDirectory) {
   const installScript = [
     "@echo off",
     "setlocal enableextensions",
-    "set \"AIGEEK_APP=%LOCALAPPDATA%\\AIGeek\\app\"",
+    "set \"AIGEEK_APP=%LOCALAPPDATA%\\AIGeekDesktop\\app\"",
     "if not exist \"%AIGEEK_APP%\" mkdir \"%AIGEEK_APP%\"",
     "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Expand-Archive -LiteralPath '%~dp0aigeek-app.zip' -DestinationPath '%AIGEEK_APP%' -Force\"",
     "if errorlevel 1 exit /b 1",
-    "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$shell=New-Object -ComObject WScript.Shell; $link=$shell.CreateShortcut([Environment]::GetFolderPath('Desktop')+'\\AIGeek.lnk'); $link.TargetPath='%AIGEEK_APP%\\AIGeek.exe'; $link.WorkingDirectory='%AIGEEK_APP%'; $link.IconLocation='%AIGEEK_APP%\\AIGeek.exe,0'; $link.Save()\"",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$shell=New-Object -ComObject WScript.Shell; foreach($shortcutPath in @([Environment]::GetFolderPath('Desktop')+'\\AIGeek.lnk',[Environment]::GetFolderPath('Programs')+'\\AIGeek.lnk')) { $link=$shell.CreateShortcut($shortcutPath); $link.TargetPath='%AIGEEK_APP%\\AIGeek.exe'; $link.WorkingDirectory='%AIGEEK_APP%'; $link.IconLocation='%AIGEEK_APP%\\AIGeek.exe,0'; $link.Save() }\"",
     "start \"\" \"%AIGEEK_APP%\\AIGeek.exe\"",
     "exit /b 0",
     "",
