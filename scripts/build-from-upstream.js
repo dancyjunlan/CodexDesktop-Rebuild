@@ -120,13 +120,26 @@ function setWindowsExecutableIcon(exePath, iconPath) {
   execFileSync(rceditExe, [exePath, "--set-icon", iconPath], { stdio: "pipe" });
 }
 
-function createWindowsZip(sourceDir, zipPath) {
-  // tar.exe is shipped with current Windows and supports ZIP through -a.
-  // This avoids a build-time dependency on the optional 7-Zip CLI.
-  execFileSync("tar.exe", ["-a", "-c", "-f", zipPath, "."], {
-    cwd: sourceDir,
-    stdio: "inherit",
+async function createWindowsInstaller(appDirectory, version, iconPath) {
+  const installerDir = path.join(OUT_DIR, "installer");
+  clearDir(installerDir);
+
+  await require("electron-winstaller").createWindowsInstaller({
+    appDirectory,
+    outputDirectory: installerDir,
+    authors: "AIGeek Studio",
+    description: "AIGeek desktop app",
+    exe: "AIGeek.exe",
+    name: "AIGeek",
+    title: "AIGeek",
+    version,
+    setupIcon: iconPath,
+    setupExe: "AIGeek-Setup.exe",
+    noDelta: true,
+    noMsi: true,
   });
+
+  return path.join(installerDir, "AIGeek-Setup.exe");
 }
 
 // ─── macOS build ────────────────────────────────────────────────
@@ -214,7 +227,7 @@ function buildMac(platform) {
 
 // ─── Windows build ──────────────────────────────────────────────
 
-function buildWin(platform) {
+async function buildWin(platform) {
   const platformDir = path.join(SRC_DIR, platform);
   const asarDir = path.join(platformDir, "_asar");
 
@@ -246,28 +259,15 @@ function buildWin(platform) {
   const brandedRuntimeExe = path.join(outApp, "AIGeek.exe");
   fs.copyFileSync(iconPath, path.join(resourcesDir, "aigeek.ico"));
 
-  // Compute old ASAR header hash (before repack)
   const asarPath = path.join(resourcesDir, "app.asar");
-  const oldHash = computeAsarHeaderHash(asarPath);
-  console.log(`   [integrity] old hash: ${oldHash.slice(0, 16)}...`);
 
   // Repack patched ASAR
   console.log("   [asar pack] _asar/ -> app.asar");
   execSync(`npx asar pack "${asarDir}" "${asarPath}"`);
 
-  // Compute new hash and patch exe
-  const newHash = computeAsarHeaderHash(asarPath);
-  console.log(`   [integrity] new hash: ${newHash.slice(0, 16)}...`);
-
-  if (oldHash !== newHash) {
-    // ChatGPT.exe is the Electron runtime; Codex.exe is only a launcher.
-    const exePath = upstreamRuntimeExe;
-    if (fs.existsSync(exePath)) {
-      patchExeHash(exePath, oldHash, newHash);
-    } else {
-      console.log("   [!] ChatGPT.exe not found for hash patching");
-    }
-  }
+  // This MSIX runtime does not embed an app.asar header hash in its EXEs.
+  // The previous byte-replacement attempt therefore never matched and could
+  // not affect loading. The repacked archive is loaded directly from resources.
 
   // Start a unique branded host so Windows does not reuse the upstream
   // ChatGPT.exe taskbar icon cache for the packaged application.
@@ -277,15 +277,12 @@ function buildWin(platform) {
   // Replace codex CLI
   replaceCodex(platform, resourcesDir, "codex.exe");
 
-  // Create ZIP
+  // Create a distributable Squirrel installer instead of a portable ZIP.
   const version = getVersion(asarDir);
-  const zipName = `AIGeek-win-x64-${version}.zip`;
-  const zipPath = path.join(OUT_DIR, zipName);
-  console.log(`   [zip] ${zipName}`);
-  createWindowsZip(outApp, zipPath);
-
-  const sizeMB = (fs.statSync(zipPath).size / 1048576).toFixed(1);
-  console.log(`   [ok] ${zipPath} (${sizeMB} MB)`);
+  console.log("   [installer] creating AIGeek-Setup.exe");
+  const setupPath = await createWindowsInstaller(outApp, version, iconPath);
+  const sizeMB = (fs.statSync(setupPath).size / 1048576).toFixed(1);
+  console.log(`   [ok] ${setupPath} (${sizeMB} MB)`);
 }
 
 // ─── ASAR integrity ─────────────────────────────────────────────
@@ -296,19 +293,6 @@ function computeAsarHeaderHash(asarPath) {
   const headerSize = buf.readUInt32LE(12);
   const header = buf.slice(16, 16 + headerSize);
   return crypto.createHash("sha256").update(header).digest("hex");
-}
-
-function patchExeHash(exePath, oldHash, newHash) {
-  const buf = fs.readFileSync(exePath);
-  const oldBuf = Buffer.from(oldHash, "ascii");
-  const idx = buf.indexOf(oldBuf);
-  if (idx < 0) {
-    console.log("   [!] old hash not found in exe");
-    return;
-  }
-  Buffer.from(newHash, "ascii").copy(buf, idx);
-  fs.writeFileSync(exePath, buf);
-  console.log(`   [integrity] exe hash patched at offset ${idx}`);
 }
 
 function updateAsarIntegrity(asarPath, infoPlistPath) {
@@ -350,7 +334,7 @@ function getVersion(asarDir) {
 
 // ─── Main ───────────────────────────────────────────────────────
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const platIdx = args.indexOf("--platform");
   const platform = platIdx !== -1 ? args[platIdx + 1] : null;
@@ -366,8 +350,11 @@ function main() {
   if (platform.startsWith("mac")) {
     buildMac(platform);
   } else {
-    buildWin(platform);
+    await buildWin(platform);
   }
 }
 
-main();
+main().catch((error) => {
+  console.error(error.stack || error);
+  process.exit(1);
+});
