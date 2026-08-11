@@ -12,7 +12,7 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
@@ -54,6 +54,11 @@ function resolveCodexVendor(platform) {
   if (!triple) return null;
   const binName = platform === "win" ? "codex.exe" : "codex";
 
+  // sync-upstream already extracts the matching CLI with the desktop runtime.
+  // Prefer it to a network lookup so an offline build remains reproducible.
+  const extractedCli = path.join(SRC_DIR, platform, binName);
+  if (fs.existsSync(extractedCli)) return extractedCli;
+
   // Try platform-specific package (0.128+)
   const PKG_MAP = { "mac-arm64": "codex-darwin-arm64", "mac-x64": "codex-darwin-x64", "win": "codex-win32-x64" };
   const platPkg = PKG_MAP[platform];
@@ -79,6 +84,7 @@ function resolveCodexVendor(platform) {
   try {
     baseVer = execSync("npm view @cometix/codex version", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
   } catch { return null; }
+  if (!baseVer) return null;
 
   // e.g. "0.128.0-cometix" → "@cometix/codex@0.128.0-cometix-darwin-x64"
   const platPkgSpec = `@cometix/codex@${baseVer}-${suffix}`;
@@ -98,6 +104,29 @@ function resolveCodexVendor(platform) {
     console.log(`   [!] npm pack failed: ${e.message}`);
   }
   return null;
+}
+
+function setWindowsExecutableIcon(exePath, iconPath) {
+  const rceditExe = path.join(
+    PROJECT_ROOT,
+    "node_modules",
+    "electron-winstaller",
+    "vendor",
+    "rcedit.exe",
+  );
+  if (!fs.existsSync(rceditExe)) {
+    throw new Error("rcedit.exe is required to set the Windows application icon");
+  }
+  execFileSync(rceditExe, [exePath, "--set-icon", iconPath], { stdio: "pipe" });
+}
+
+function createWindowsZip(sourceDir, zipPath) {
+  // tar.exe is shipped with current Windows and supports ZIP through -a.
+  // This avoids a build-time dependency on the optional 7-Zip CLI.
+  execFileSync("tar.exe", ["-a", "-c", "-f", zipPath, "."], {
+    cwd: sourceDir,
+    stdio: "inherit",
+  });
 }
 
 // ─── macOS build ────────────────────────────────────────────────
@@ -212,6 +241,10 @@ function buildWin(platform) {
   copyRecursive(appDir, outApp);
 
   const resourcesDir = path.join(outApp, "resources");
+  const iconPath = path.join(PROJECT_ROOT, "resources", "forgecode.ico");
+  const upstreamRuntimeExe = path.join(outApp, "ChatGPT.exe");
+  const brandedRuntimeExe = path.join(outApp, "AIGeek.exe");
+  fs.copyFileSync(iconPath, path.join(resourcesDir, "aigeek.ico"));
 
   // Compute old ASAR header hash (before repack)
   const asarPath = path.join(resourcesDir, "app.asar");
@@ -227,24 +260,29 @@ function buildWin(platform) {
   console.log(`   [integrity] new hash: ${newHash.slice(0, 16)}...`);
 
   if (oldHash !== newHash) {
-    // Find Codex.exe in app root
-    const exePath = path.join(outApp, "Codex.exe");
+    // ChatGPT.exe is the Electron runtime; Codex.exe is only a launcher.
+    const exePath = upstreamRuntimeExe;
     if (fs.existsSync(exePath)) {
       patchExeHash(exePath, oldHash, newHash);
     } else {
-      console.log("   [!] Codex.exe not found for hash patching");
+      console.log("   [!] ChatGPT.exe not found for hash patching");
     }
   }
+
+  // Start a unique branded host so Windows does not reuse the upstream
+  // ChatGPT.exe taskbar icon cache for the packaged application.
+  fs.copyFileSync(upstreamRuntimeExe, brandedRuntimeExe);
+  setWindowsExecutableIcon(brandedRuntimeExe, iconPath);
 
   // Replace codex CLI
   replaceCodex(platform, resourcesDir, "codex.exe");
 
   // Create ZIP
   const version = getVersion(asarDir);
-  const zipName = `Codex-win-x64-${version}.zip`;
+  const zipName = `AIGeek-win-x64-${version}.zip`;
   const zipPath = path.join(OUT_DIR, zipName);
   console.log(`   [zip] ${zipName}`);
-  execSync(`7zz a -tzip -mx=5 "${zipPath}" .`, { cwd: outApp });
+  createWindowsZip(outApp, zipPath);
 
   const sizeMB = (fs.statSync(zipPath).size / 1048576).toFixed(1);
   console.log(`   [ok] ${zipPath} (${sizeMB} MB)`);
