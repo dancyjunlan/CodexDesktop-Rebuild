@@ -186,7 +186,8 @@ function patchMainProcess(platform) {
 function patchWindowsRuntimeIcon(platform) {
   if (platform !== "win") return null;
 
-  const runtimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
+  const upstreamRuntimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
+  const brandedRuntimeExe = path.join(SRC_DIR, "win", "runtime", "AIGeek.exe");
   const runtimeResourcesDir = path.join(SRC_DIR, "win", "runtime", "resources");
   const packagedResourcesIcon = path.join(SRC_DIR, "win", "aigeek.ico");
   const runtimeResourcesIcon = path.join(runtimeResourcesDir, "aigeek.ico");
@@ -197,7 +198,7 @@ function patchWindowsRuntimeIcon(platform) {
     "vendor",
     "rcedit.exe",
   );
-  if (!fs.existsSync(runtimeExe) || !fs.existsSync(rceditExe)) {
+  if (!fs.existsSync(upstreamRuntimeExe) || !fs.existsSync(rceditExe)) {
     throw new Error("win: runtime icon tooling was not found");
   }
 
@@ -207,8 +208,15 @@ function patchWindowsRuntimeIcon(platform) {
   fs.copyFileSync(WINDOWS_ICON_SOURCE, runtimeResourcesIcon);
   fs.copyFileSync(WINDOWS_ICON_SOURCE, packagedResourcesIcon);
 
+  // Windows keeps taskbar icon associations per executable path. Running the
+  // branded copy avoids retaining the upstream ChatGPT.exe icon from Shell's
+  // cache while preserving the extracted runtime as an untouched base.
+  if (!fs.existsSync(brandedRuntimeExe)) {
+    fs.copyFileSync(upstreamRuntimeExe, brandedRuntimeExe);
+  }
+
   try {
-    execFileSync(rceditExe, [runtimeExe, "--set-icon", WINDOWS_ICON_SOURCE], {
+    execFileSync(rceditExe, [brandedRuntimeExe, "--set-icon", WINDOWS_ICON_SOURCE], {
       stdio: "pipe",
     });
   } catch (error) {
@@ -219,7 +227,7 @@ function patchWindowsRuntimeIcon(platform) {
     }
     throw error;
   }
-  return relPath(runtimeExe);
+  return relPath(brandedRuntimeExe);
 }
 
 function patchOnboarding(platform) {

@@ -101,9 +101,10 @@ console.log(`[start-dev] CLI Path: ${cliPath}`);
 console.log(`[start-dev] App Root: ${appEntry}`);
 
 // The Windows app's native modules are built for the upstream Owl Electron
-// runtime. Its actual host is ChatGPT.exe; Codex.exe is only a small launcher.
+// runtime. AIGeek.exe is a branded copy of that runtime; Codex.exe is only a
+// small launcher and cannot host the desktop app directly.
 const upstreamRuntime = platform === 'win32'
-  ? path.join(__dirname, '..', 'src', srcPlatform, 'runtime', 'ChatGPT.exe')
+  ? path.join(__dirname, '..', 'src', srcPlatform, 'runtime', 'AIGeek.exe')
   : null;
 const electronBin = upstreamRuntime && fs.existsSync(upstreamRuntime)
   ? upstreamRuntime
