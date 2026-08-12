@@ -124,73 +124,20 @@ function setWindowsExecutableIcon(exePath, iconPath) {
   execFileSync(rceditExe, [exePath, "--set-icon", iconPath], { stdio: "pipe" });
 }
 
-function createIExpressInstaller(appDirectory) {
-  const stagingDir = path.join(OUT_DIR, "installer-staging");
-  const payloadPath = path.join(stagingDir, "aigeek-app.zip");
-  const installScriptPath = path.join(stagingDir, "install.cmd");
-  const sedPath = path.join(stagingDir, "aigeek-installer.sed");
-  const setupPath = path.join(OUT_DIR, "AIGeek-Setup.exe");
-  clearDir(stagingDir);
-  if (fs.existsSync(setupPath)) fs.rmSync(setupPath, { force: true });
+function patchWindowsRuntimeIdentity(resourcesDir) {
+  const iniPath = path.join(resourcesDir, "owl-app.ini");
+  if (!fs.existsSync(iniPath)) {
+    throw new Error("Windows Owl runtime configuration was not found");
+  }
 
-  // IExpress accepts a compact payload. The installed files remain in a normal
-  // Electron directory so native DLL lookup and Chromium manifests work.
-  execFileSync("tar.exe", ["-a", "-c", "-f", payloadPath, "."], {
-    cwd: appDirectory,
-    stdio: "inherit",
-  });
-
-  const installScript = [
-    "@echo off",
-    "setlocal enableextensions",
-    "set \"AIGEEK_APP=%LOCALAPPDATA%\\AIGeekDesktop\\app\"",
-    "if not exist \"%AIGEEK_APP%\" mkdir \"%AIGEEK_APP%\"",
-    "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Expand-Archive -LiteralPath '%~dp0aigeek-app.zip' -DestinationPath '%AIGEEK_APP%' -Force\"",
-    "if errorlevel 1 exit /b 1",
-    "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$shell=New-Object -ComObject WScript.Shell; foreach($shortcutPath in @([Environment]::GetFolderPath('Desktop')+'\\AIGeek.lnk',[Environment]::GetFolderPath('Programs')+'\\AIGeek.lnk')) { $link=$shell.CreateShortcut($shortcutPath); $link.TargetPath='%AIGEEK_APP%\\AIGeek.exe'; $link.WorkingDirectory='%AIGEEK_APP%'; $link.IconLocation='%AIGEEK_APP%\\AIGeek.exe,0'; $link.Save() }\"",
-    "start \"\" \"%AIGEEK_APP%\\AIGeek.exe\"",
-    "exit /b 0",
-    "",
-  ].join("\r\n");
-  fs.writeFileSync(installScriptPath, installScript, "ascii");
-
-  const sed = [
-    "[Version]",
-    "Class=IEXPRESS",
-    "SEDVersion=3",
-    "[Options]",
-    "PackagePurpose=InstallApp",
-    "ShowInstallProgramWindow=0",
-    "HideExtractAnimation=0",
-    "UseLongFileName=1",
-    "InsideCompressed=1",
-    "CAB_FixedSize=0",
-    "CAB_ResvCodeSigning=0",
-    "RebootMode=N",
-    "InstallPrompt=",
-    "DisplayLicense=",
-    "FinishMessage=AIGeek has been installed and will now start.",
-    `TargetName=${setupPath}`,
-    "FriendlyName=AIGeek Setup",
-    "AppLaunched=install.cmd",
-    "PostInstallCmd=<None>",
-    "AdminQuietInstCmd=install.cmd",
-    "UserQuietInstCmd=install.cmd",
-    "SourceFiles=SourceFiles",
-    "[SourceFiles]",
-    `SourceFiles0=${stagingDir}\\`,
-    "[SourceFiles0]",
-    "%FILE0%=",
-    "%FILE1%=",
-    "[Strings]",
-    "FILE0=\"aigeek-app.zip\"",
-    "FILE1=\"install.cmd\"",
-    "",
-  ].join("\r\n");
-  fs.writeFileSync(sedPath, sed, "ascii");
-  execFileSync("iexpress.exe", ["/N", sedPath], { stdio: "inherit" });
-
-  return setupPath;
+  const upstream = "UserDataDirectoryName=Codex";
+  const branded = "UserDataDirectoryName=AIGeek";
+  const source = fs.readFileSync(iniPath, "utf-8");
+  if (source.includes(upstream)) {
+    fs.writeFileSync(iniPath, source.replace(upstream, branded), "utf-8");
+  } else if (!source.includes(branded)) {
+    throw new Error("Windows Owl runtime user-data directory was not recognized");
+  }
 }
 
 // ─── macOS build ────────────────────────────────────────────────
@@ -300,7 +247,7 @@ function buildWin(platform) {
   // Copy app/ to output
   const outAppDir = path.join(OUT_DIR, "win");
   clearDir(outAppDir);
-  const outApp = path.join(outAppDir, "Codex-win32-x64");
+  const outApp = path.join(outAppDir, "AIGeek-win-x64");
   console.log("   [copy] MSIX app/ -> out/");
   copyRecursive(appDir, outApp);
 
@@ -308,7 +255,15 @@ function buildWin(platform) {
   const iconPath = path.join(PROJECT_ROOT, "resources", "forgecode.ico");
   const upstreamRuntimeExe = path.join(outApp, "ChatGPT.exe");
   const brandedRuntimeExe = path.join(outApp, "AIGeek.exe");
+  patchWindowsRuntimeIdentity(resourcesDir);
   fs.copyFileSync(iconPath, path.join(resourcesDir, "aigeek.ico"));
+  for (const trayIcon of [
+    "chatgpt-tray-light.ico",
+    "chatgpt-tray-dark.ico",
+    "icon-chatgpt.ico",
+  ]) {
+    fs.copyFileSync(iconPath, path.join(resourcesDir, trayIcon));
+  }
 
   const asarPath = path.join(resourcesDir, "app.asar");
 
@@ -324,16 +279,28 @@ function buildWin(platform) {
   // ChatGPT.exe taskbar icon cache for the packaged application.
   fs.copyFileSync(upstreamRuntimeExe, brandedRuntimeExe);
   setWindowsExecutableIcon(brandedRuntimeExe, iconPath);
+  fs.rmSync(upstreamRuntimeExe, { force: true });
+
+  // The extracted upstream runtime is too large for a responsive self-
+  // extracting installer. Distribute one normal application directory instead
+  // so the user can run the branded executable directly with no install-time
+  // compression or secondary launcher involved.
+  fs.writeFileSync(
+    path.join(outApp, "Start-AIGeek.cmd"),
+    "@echo off\r\nstart \"\" \"%~dp0AIGeek.exe\"\r\n",
+    "ascii",
+  );
 
   // Replace codex CLI
   replaceCodex(platform, resourcesDir, "codex.exe");
 
-  // IExpress installs the actual Electron host directly, avoiding Squirrel's
-  // proxy executable which is incompatible with this upstream MSIX runtime.
-  console.log("   [installer] creating AIGeek-Setup.exe");
-  const setupPath = createIExpressInstaller(outApp);
-  const sizeMB = (fs.statSync(setupPath).size / 1048576).toFixed(1);
-  console.log(`   [ok] ${setupPath} (${sizeMB} MB)`);
+  const oldInstallerPath = path.join(OUT_DIR, "AIGeek-Setup.exe");
+  fs.rmSync(oldInstallerPath, { force: true });
+  const runtimeIni = fs.readFileSync(path.join(resourcesDir, "owl-app.ini"), "utf-8");
+  if (!runtimeIni.includes("UserDataDirectoryName=AIGeek")) {
+    throw new Error("Windows output did not retain the AIGeek Owl runtime identity");
+  }
+  console.log(`   [ok] portable app: ${outApp}`);
 }
 
 // ─── ASAR integrity ─────────────────────────────────────────────

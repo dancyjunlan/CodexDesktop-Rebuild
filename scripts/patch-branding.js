@@ -43,10 +43,11 @@ function patchPackage(platform) {
   packageJson.productName = config.appName;
   packageJson.author = config.author;
   packageJson.description = config.description;
-  // The upstream MSIX advertises itself as the ChatGPT-branded OpenAI.Codex
-  // package. Keeping those values makes Windows route activation to an
-  // installed official Codex instance instead of this standalone application.
-  packageJson.codexAppBrand = "codex";
+  // This is an internal runtime selector, not user-facing product text. Keep
+  // the upstream value so the extracted Electron application follows its
+  // supported startup path; AIGeek's visible name and Windows identity are
+  // patched independently below.
+  packageJson.codexAppBrand = "chatgpt";
   delete packageJson.codexWindowsPackageIdentity;
   delete packageJson.codexWindowsPackagePublisher;
   writeIfChanged(packagePath, JSON.stringify(packageJson, null, 2) + "\n");
@@ -208,6 +209,7 @@ function patchWindowsRuntimeIcon(platform) {
   const upstreamRuntimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
   const brandedRuntimeExe = path.join(SRC_DIR, "win", "runtime", "AIGeek.exe");
   const runtimeResourcesDir = path.join(SRC_DIR, "win", "runtime", "resources");
+  const runtimeIniPath = path.join(SRC_DIR, "win", "owl-app.ini");
   const packagedResourcesIcon = path.join(SRC_DIR, "win", "aigeek.ico");
   const runtimeResourcesIcon = path.join(runtimeResourcesDir, "aigeek.ico");
   const rceditExe = path.join(
@@ -224,8 +226,16 @@ function patchWindowsRuntimeIcon(platform) {
   // BrowserWindow loads this path for both the unpackaged runtime and a Forge
   // package. The latter receives src/win/aigeek.ico through packageAfterCopy.
   fs.mkdirSync(runtimeResourcesDir, { recursive: true });
+  patchWindowsRuntimeIdentity(runtimeIniPath);
   fs.copyFileSync(WINDOWS_ICON_SOURCE, runtimeResourcesIcon);
   fs.copyFileSync(WINDOWS_ICON_SOURCE, packagedResourcesIcon);
+  for (const trayIcon of [
+    "chatgpt-tray-light.ico",
+    "chatgpt-tray-dark.ico",
+    "icon-chatgpt.ico",
+  ]) {
+    fs.copyFileSync(WINDOWS_ICON_SOURCE, path.join(runtimeResourcesDir, trayIcon));
+  }
 
   // Windows keeps taskbar icon associations per executable path. Running the
   // branded copy avoids retaining the upstream ChatGPT.exe icon from Shell's
@@ -247,6 +257,25 @@ function patchWindowsRuntimeIcon(platform) {
     throw error;
   }
   return relPath(brandedRuntimeExe);
+}
+
+function patchWindowsRuntimeIdentity(runtimeIniPath) {
+  if (!fs.existsSync(runtimeIniPath)) {
+    throw new Error(`win: Owl runtime configuration was not found: ${relPath(runtimeIniPath)}`);
+  }
+
+  const upstream = "UserDataDirectoryName=Codex";
+  const branded = `UserDataDirectoryName=${config.appName}`;
+  const source = fs.readFileSync(runtimeIniPath, "utf-8");
+  if (source.includes(upstream)) {
+    writeIfChanged(
+      runtimeIniPath,
+      replaceExact(source, upstream, branded, "Owl runtime user-data directory", runtimeIniPath),
+    );
+  } else if (!source.includes(branded)) {
+    throw new Error(`${relPath(runtimeIniPath)}: Owl runtime user-data directory was not recognized`);
+  }
+  return relPath(runtimeIniPath);
 }
 
 function patchOnboarding(platform) {
@@ -386,6 +415,10 @@ function main() {
       const locale = localeName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", localeName), "utf-8")
         : "";
+      const runtimeIniPath = path.join(SRC_DIR, target, "owl-app.ini");
+      const runtimeReady = target !== "win"
+        || (fs.existsSync(runtimeIniPath)
+          && fs.readFileSync(runtimeIniPath, "utf-8").includes(`UserDataDirectoryName=${config.appName}`));
       const ready = packageJson.productName === config.appName
         && index.includes(BLOCK_START)
         && bootstrap.includes(config.devAppName)
@@ -394,8 +427,8 @@ function main() {
         && onboarding.includes("__forgecodeOnboardingSkipped")
         && appInitial.includes("data-forgecode-startup-icon")
         && locale.includes("\"composer.placeholder.workWithChatGPT\":`使用 ForgeCode`");
-      console.log(`  [${target}] ${ready ? "ready" : "needs patch"}`);
-      if (!ready) process.exitCode = 1;
+      console.log(`  [${target}] ${ready && runtimeReady ? "ready" : "needs patch"}`);
+      if (!ready || !runtimeReady) process.exitCode = 1;
       continue;
     }
 

@@ -1,5 +1,6 @@
 (() => {
   const appName = "__FORGECODE_NAME__";
+  const sidebarName = "艾极科技";
   const exactNames = new Set(["Codex", "OpenAI Codex", "Codex (Dev)"]);
   const hiddenWorkspaceNames = new Set(["ChatGPT Work"]);
   // React may recreate the selector after its label has already been branded.
@@ -50,7 +51,7 @@
         && rect.left < 300
         && rect.top < 100
       ) {
-        node.nodeValue = value.replace(trimmed, appName);
+        node.nodeValue = value.replace(trimmed, sidebarName);
         parent.setAttribute("data-forgecode-brand", "");
         lockWorkspaceSelector(parent);
         continue;
