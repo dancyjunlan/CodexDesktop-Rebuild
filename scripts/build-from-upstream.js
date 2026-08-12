@@ -17,6 +17,8 @@ const { execSync, execFileSync } = require("child_process");
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
 const OUT_DIR = path.join(PROJECT_ROOT, "out");
+const WINDOWS_LAUNCHER_SOURCE = path.join(PROJECT_ROOT, "resources", "aigeek-launcher.cs");
+const WINDOWS_CSC = path.join(process.env.WINDIR || "C:\\Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
 
 const TARGET_TRIPLE_MAP = {
   "mac-arm64": "aarch64-apple-darwin",
@@ -124,6 +126,39 @@ function setWindowsExecutableIcon(exePath, iconPath) {
   execFileSync(rceditExe, [exePath, "--set-icon", iconPath], { stdio: "pipe" });
 }
 
+function setWindowsExecutableIdentity(exePath, iconPath) {
+  setWindowsExecutableIcon(exePath, iconPath);
+  const rceditExe = path.join(
+    PROJECT_ROOT,
+    "node_modules",
+    "electron-winstaller",
+    "vendor",
+    "rcedit.exe",
+  );
+  for (const [field, value] of [
+    ["ProductName", "AIGeek"],
+    ["FileDescription", "AIGeek Desktop"],
+    ["CompanyName", "AIGeek Studio"],
+    ["OriginalFilename", "AIGeek.exe"],
+  ]) {
+    execFileSync(rceditExe, [exePath, "--set-version-string", field, value], { stdio: "pipe" });
+  }
+}
+
+function buildWindowsLauncher(destination, iconPath) {
+  if (!fs.existsSync(WINDOWS_CSC)) {
+    throw new Error("Windows C# compiler was not found; cannot build the AIGeek launcher");
+  }
+  execFileSync(WINDOWS_CSC, [
+    "/nologo",
+    "/target:winexe",
+    "/optimize+",
+    "/out:" + destination,
+    WINDOWS_LAUNCHER_SOURCE,
+  ], { stdio: "pipe" });
+  setWindowsExecutableIdentity(destination, iconPath);
+}
+
 function patchWindowsRuntimeIdentity(resourcesDir) {
   const iniPath = path.join(resourcesDir, "owl-app.ini");
   if (!fs.existsSync(iniPath)) {
@@ -136,7 +171,7 @@ function patchWindowsRuntimeIdentity(resourcesDir) {
   if (source.includes(upstream)) {
     fs.writeFileSync(iniPath, source.replace(upstream, branded), "utf-8");
   } else if (!source.includes(branded)) {
-    throw new Error("Windows Owl runtime user-data directory was not recognized");
+    throw new Error("Windows Owl runtime identity was not recognized");
   }
 }
 
@@ -254,7 +289,7 @@ function buildWin(platform) {
   const resourcesDir = path.join(outApp, "resources");
   const iconPath = path.join(PROJECT_ROOT, "resources", "forgecode.ico");
   const upstreamRuntimeExe = path.join(outApp, "ChatGPT.exe");
-  const brandedRuntimeExe = path.join(outApp, "AIGeek.exe");
+  const brandedRuntimeExe = path.join(outApp, "AIGeekHost.exe");
   patchWindowsRuntimeIdentity(resourcesDir);
   fs.copyFileSync(iconPath, path.join(resourcesDir, "aigeek.ico"));
   for (const trayIcon of [
@@ -275,10 +310,12 @@ function buildWin(platform) {
   // The previous byte-replacement attempt therefore never matched and could
   // not affect loading. The repacked archive is loaded directly from resources.
 
-  // Start a unique branded host so Windows does not reuse the upstream
-  // ChatGPT.exe taskbar icon cache for the packaged application.
+  // The outer launcher owns the public executable and always supplies an
+  // independent Chromium data directory. The Owl host cannot do that itself:
+  // it only accepts a directory name below Roaming\\Codex\\web.
   fs.copyFileSync(upstreamRuntimeExe, brandedRuntimeExe);
-  setWindowsExecutableIcon(brandedRuntimeExe, iconPath);
+  setWindowsExecutableIdentity(brandedRuntimeExe, iconPath);
+  buildWindowsLauncher(path.join(outApp, "AIGeek.exe"), iconPath);
   fs.rmSync(upstreamRuntimeExe, { force: true });
 
   // The extracted upstream runtime is too large for a responsive self-
@@ -290,12 +327,21 @@ function buildWin(platform) {
     "@echo off\r\nstart \"\" \"%~dp0AIGeek.exe\"\r\n",
     "ascii",
   );
+  fs.copyFileSync(path.join(PROJECT_ROOT, "resources", "LICENSE"), path.join(outApp, "LICENSE"));
 
   // Replace codex CLI
   replaceCodex(platform, resourcesDir, "codex.exe");
 
+  // The MSIX root Codex.exe is only a launcher that activates an existing
+  // installed Codex session. It is not this portable app's Electron host and
+  // makes users accidentally reopen the official app instead of AIGeek.
+  fs.rmSync(path.join(outApp, "Codex.exe"), { force: true });
+
   const oldInstallerPath = path.join(OUT_DIR, "AIGeek-Setup.exe");
   fs.rmSync(oldInstallerPath, { force: true });
+  if (fs.existsSync(path.join(outApp, "Codex.exe"))) {
+    throw new Error("Windows output retained the upstream Codex launcher");
+  }
   const runtimeIni = fs.readFileSync(path.join(resourcesDir, "owl-app.ini"), "utf-8");
   if (!runtimeIni.includes("UserDataDirectoryName=AIGeek")) {
     throw new Error("Windows output did not retain the AIGeek Owl runtime identity");
@@ -350,6 +396,14 @@ function getVersion(asarDir) {
   }
 }
 
+function applyPatches(platform) {
+  console.log("   [patch] applying local patches");
+  execFileSync(process.execPath, [path.join(__dirname, "patch-all.js"), platform], {
+    cwd: PROJECT_ROOT,
+    stdio: "inherit",
+  });
+}
+
 // ─── Main ───────────────────────────────────────────────────────
 
 async function main() {
@@ -364,6 +418,7 @@ async function main() {
 
   console.log(`\n== Build from upstream: ${platform} ==\n`);
   fs.mkdirSync(OUT_DIR, { recursive: true });
+  applyPatches(platform);
 
   if (platform.startsWith("mac")) {
     buildMac(platform);

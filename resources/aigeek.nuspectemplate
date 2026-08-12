@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata>
+    <id><%- name %></id>
+    <title><%- title %></title>
+    <version><%- version %></version>
+    <authors><%- authors %></authors>
+    <owners><%- owners %></owners>
+    <iconUrl><%- iconUrl %></iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description><%- description %></description>
+    <copyright><%- copyright %></copyright>
+  </metadata>
+  <files>
+    <!-- Owl requires several root runtime files and data directories. Keep the
+         portable layout intact so the installed host has every dependency. -->
+    <file src="**\*" target="lib\net45" />
+  </files>
+</package>

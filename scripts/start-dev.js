@@ -9,6 +9,11 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
+execFileSync(process.execPath, [path.join(__dirname, 'seed-aigeek-home.js')], {
+  cwd: path.join(__dirname, '..'),
+  stdio: 'inherit',
+});
+
 // Detect platform and architecture
 const platform = process.platform;
 const arch = os.arch();
@@ -110,21 +115,24 @@ const electronBin = upstreamRuntime && fs.existsSync(upstreamRuntime)
   ? upstreamRuntime
   : require('electron');
 console.log(`[start-dev] Runtime: ${electronBin}`);
+const appEnv = {
+  ...process.env,
+  // Keep AIGeek settings, sessions, and CLI background state independent.
+  CODEX_HOME: path.join(os.homedir(), '.aigeek'),
+  CODEX_CLI_PATH: cliPath,
+  BUILD_FLAVOR: process.env.BUILD_FLAVOR || 'dev',
+  ELECTRON_RENDERER_URL: process.env.ELECTRON_RENDERER_URL || 'app://-/index.html',
+  CODEX_ELECTRON_RESOURCES_PATH: path.join(__dirname, '..', 'src', srcPlatform),
+  CODEX_ELECTRON_BUNDLED_PLUGINS_RESOURCES_PATH: path.join(__dirname, '..', 'src', srcPlatform),
+  CODEX_NODE_REPL_PATH: path.join(__dirname, '..', 'src', srcPlatform, 'node_repl'),
+  CODEX_BROWSER_USE_NODE_PATH: path.join(__dirname, '..', 'src', srcPlatform, 'node'),
+};
+delete appEnv.CODEX_ELECTRON_USER_DATA_PATH;
+
 const child = spawn(electronBin, [appEntry], {
   cwd: path.join(__dirname, '..'),
   stdio: 'inherit',
-  env: {
-    ...process.env,
-    // Keep ForgeCode settings and SQLite state independent from Codex.
-    CODEX_HOME: process.env.CODEX_HOME || path.join(os.homedir(), '.forgecode'),
-    CODEX_CLI_PATH: cliPath,
-    BUILD_FLAVOR: process.env.BUILD_FLAVOR || 'dev',
-    ELECTRON_RENDERER_URL: process.env.ELECTRON_RENDERER_URL || 'app://-/index.html',
-    CODEX_ELECTRON_RESOURCES_PATH: path.join(__dirname, '..', 'src', srcPlatform),
-    CODEX_ELECTRON_BUNDLED_PLUGINS_RESOURCES_PATH: path.join(__dirname, '..', 'src', srcPlatform),
-    CODEX_NODE_REPL_PATH: path.join(__dirname, '..', 'src', srcPlatform, 'node_repl'),
-    CODEX_BROWSER_USE_NODE_PATH: path.join(__dirname, '..', 'src', srcPlatform, 'node'),
-  },
+  env: appEnv,
 });
 
 child.on('close', (code) => {

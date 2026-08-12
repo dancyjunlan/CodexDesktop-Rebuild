@@ -38,6 +38,10 @@
   display: none !important;
 }
 
+[data-aigeek-hide] {
+  display: none !important;
+}
+
 [data-aigeek-home-default-mark] {
   display: none !important;
 }

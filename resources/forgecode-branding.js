@@ -10,6 +10,29 @@
     ["Use ChatGPT Work", `Use ${appName}`],
     ["使用 ChatGPT Work", `使用 ${appName}`],
   ]);
+  const homeGreetingLabels = new Set([
+    "What should we build?",
+    "\u6211\u4eec\u8be5\u6784\u5efa\u4ec0\u4e48\uff1f",
+  ]);
+  const homeGreeting = "\u827e\u6781\u79d1\u6280\u667a\u80fd\u8bbe\u8ba1\u52a9\u624b";
+  const hiddenNavigationLabels = new Set([
+    "Pull requests",
+    "Scheduled",
+    "Plugins",
+    "\u62c9\u53d6\u8bf7\u6c42",
+    "\u5df2\u5b89\u6392",
+    "\u63d2\u4ef6",
+  ]);
+  const hiddenSuggestionLabels = new Set([
+    "Explore and understand code",
+    "Build a new feature, app, or tool",
+    "Review code and suggest improvements",
+    "Fix bugs and failures",
+    "\u63a2\u7d22\u5e76\u7406\u89e3\u4ee3\u7801",
+    "\u6784\u5efa\u65b0\u529f\u80fd\u3001\u5e94\u7528\u6216\u5de5\u5177",
+    "\u5ba1\u67e5\u4ee3\u7801\u5e76\u63d0\u51fa\u4fee\u6539\u5efa\u8bae",
+    "\u4fee\u590d\u95ee\u9898\u548c\u5931\u8d25",
+  ]);
   let scheduled = false;
 
   function replaceHomeBrandMark() {
@@ -38,6 +61,11 @@
       const trimmed = value.trim();
       const parent = node.parentElement;
       if (!parent) continue;
+
+      if (homeGreetingLabels.has(trimmed)) {
+        node.nodeValue = value.replace(trimmed, homeGreeting);
+        continue;
+      }
 
       const replacement = textReplacements.get(trimmed);
       if (replacement) {
@@ -108,11 +136,37 @@
     }
   }
 
+  function hideUnwantedItem(element, kind) {
+    const control = element.closest("button, a, [role='button'], [role='link']");
+    const target = control || element.parentElement;
+    if (target) target.setAttribute("data-aigeek-hide", kind);
+  }
+
+  function hideUnwantedSurfaces(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+
+    for (const node of nodes) {
+      const label = node.nodeValue.trim();
+      const element = node.parentElement;
+      if (!element) continue;
+
+      if (hiddenNavigationLabels.has(label) && element.getBoundingClientRect().left < 300) {
+        hideUnwantedItem(element, "navigation");
+      } else if (hiddenSuggestionLabels.has(label)) {
+        hideUnwantedItem(element, "suggestion");
+      }
+    }
+
+  }
+
   function refresh() {
     scheduled = false;
     document.title = appName;
     replaceVisibleBranding(document.body);
     replaceHomeBrandMark();
+    hideUnwantedSurfaces(document.body);
   }
 
   function scheduleRefresh() {

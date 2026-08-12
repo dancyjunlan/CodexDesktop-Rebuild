@@ -19,6 +19,13 @@ const SHATTER_SOURCE = path.join(RESOURCE_DIR, "aigeek-logo-shatter.gif");
 const WINDOWS_ICON_SOURCE = path.join(RESOURCE_DIR, "forgecode.ico");
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
+const WINDOWS_RUNTIME_INI = path.join(SRC_DIR, "win", "owl-app.ini");
+// Owl builds the Chromium path below Roaming\\Codex\\web. Resolve back to
+// Roaming before appending the branded directory so it never shares Codex's
+// app-data root.
+const WINDOWS_RUNTIME_USER_DATA_NAME = "AIGeek";
+const PREVIOUS_DATABASE_FILE_NAME = "forgecode.db";
+const PREVIOUS_DEV_DATABASE_FILE_NAME = "forgecode-dev.db";
 const BLOCK_START = "<!-- FORGECODE_BRANDING_START -->";
 const BLOCK_END = "<!-- FORGECODE_BRANDING_END -->";
 
@@ -104,7 +111,9 @@ function patchMainProcess(platform) {
   const sqliteName = fs.readdirSync(buildDir).find((file) => {
     if (!/^src-.*\.js$/.test(file)) return false;
     const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
-    return source.includes("`codex-dev.db`") || source.includes("`" + config.devDatabaseFileName + "`");
+    return source.includes("`codex-dev.db`")
+      || source.includes("`" + PREVIOUS_DEV_DATABASE_FILE_NAME + "`")
+      || source.includes("`" + config.devDatabaseFileName + "`");
   });
   if (!bootstrapName || !mainName || !sqliteName) {
     throw new Error(`${platform}: could not locate main-process branding bundles`);
@@ -117,6 +126,9 @@ function patchMainProcess(platform) {
   const upstreamAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(i.i(Z))";
   const brandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`"
     + config.windowsAppUserModelId + ".dev`:`" + config.windowsAppUserModelId + "`)";
+  const brandedAppDataPath = "a.app.setPath(`appData`,o.join(a.app.getPath(`appData`),`..`,`" + config.appName + "`))";
+  const previousHomeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`.aigeek`);try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`.aigeek`),`utf8`):c.copyFileSync(o.join(e,n),r))}}catch(e){}})()";
+  const homeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`.aigeek`);process.env.CODEX_HOME=t,delete process.env.CODEX_ELECTRON_USER_DATA_PATH;try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`.aigeek`),`utf8`):c.copyFileSync(o.join(e,n),r))}}catch(e){}})()";
   const upstreamSingleInstanceExit = "if(!(!$||a.app.requestSingleInstanceLock()))";
   const brandedSingleInstanceExit = "if(!(!$||!0))";
   const previousAppNameForBuildFlavor = "n===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
@@ -145,6 +157,29 @@ function patchMainProcess(platform) {
     );
   } else if (!bootstrap.includes(brandedAppUserModelId)) {
     throw new Error(`${relPath(bootstrapPath)}: Windows AppUserModelID was not recognized`);
+  }
+  if (!bootstrap.includes(brandedAppDataPath)) {
+    const appNameCall = "a.app.setName(" + appNameForResolvedFlavor + ")";
+    if (!bootstrap.includes(appNameCall)) {
+      throw new Error(`${relPath(bootstrapPath)}: application data path anchor was not recognized`);
+    }
+    bootstrap = replaceExact(
+      bootstrap,
+      appNameCall,
+      appNameCall + "," + brandedAppDataPath + "," + homeMigration,
+      "AIGeek application data path",
+      bootstrapPath,
+    );
+  } else if (bootstrap.includes(previousHomeMigration)) {
+    bootstrap = replaceExact(
+      bootstrap,
+      previousHomeMigration,
+      homeMigration,
+      "previous AIGeek home migration",
+      bootstrapPath,
+    );
+  } else if (!bootstrap.includes(homeMigration)) {
+    throw new Error(`${relPath(bootstrapPath)}: AIGeek home migration was not recognized`);
   }
   if (bootstrap.includes(upstreamSingleInstanceExit)) {
     bootstrap = replaceExact(
@@ -183,6 +218,12 @@ function patchMainProcess(platform) {
   if (upstreamProdCount === 2 && upstreamDevCount === 2) {
     sqlite = sqlite.replaceAll("`codex.db`", "`" + config.databaseFileName + "`");
     sqlite = sqlite.replaceAll("`codex-dev.db`", "`" + config.devDatabaseFileName + "`");
+  } else if (
+    sqlite.split("`" + PREVIOUS_DATABASE_FILE_NAME + "`").length - 1 === 2
+    && sqlite.split("`" + PREVIOUS_DEV_DATABASE_FILE_NAME + "`").length - 1 === 2
+  ) {
+    sqlite = sqlite.replaceAll("`" + PREVIOUS_DATABASE_FILE_NAME + "`", "`" + config.databaseFileName + "`");
+    sqlite = sqlite.replaceAll("`" + PREVIOUS_DEV_DATABASE_FILE_NAME + "`", "`" + config.devDatabaseFileName + "`");
   } else {
     const brandedProdCount = sqlite.split("`" + config.databaseFileName + "`").length - 1;
     const brandedDevCount = sqlite.split("`" + config.devDatabaseFileName + "`").length - 1;
@@ -191,10 +232,13 @@ function patchMainProcess(platform) {
     }
   }
   const upstreamHome = "i.join(r.homedir(),`.codex`)";
-  const brandedHome = "i.join(r.homedir(),`.forgecode`)";
+  const previousBrandedHome = "i.join(r.homedir(),`.forgecode`)";
+  const brandedHome = "i.join(r.homedir(),`.aigeek`)";
   const upstreamHomeCount = sqlite.split(upstreamHome).length - 1;
   if (upstreamHomeCount === 2) {
     sqlite = sqlite.replaceAll(upstreamHome, brandedHome);
+  } else if ((sqlite.split(previousBrandedHome).length - 1) === 2) {
+    sqlite = sqlite.replaceAll(previousBrandedHome, brandedHome);
   } else if ((sqlite.split(brandedHome).length - 1) !== 2) {
     throw new Error(`${relPath(sqlitePath)}: unexpected CODEX_HOME fallback match count`);
   }
@@ -209,7 +253,6 @@ function patchWindowsRuntimeIcon(platform) {
   const upstreamRuntimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
   const brandedRuntimeExe = path.join(SRC_DIR, "win", "runtime", "AIGeek.exe");
   const runtimeResourcesDir = path.join(SRC_DIR, "win", "runtime", "resources");
-  const runtimeIniPath = path.join(SRC_DIR, "win", "owl-app.ini");
   const packagedResourcesIcon = path.join(SRC_DIR, "win", "aigeek.ico");
   const runtimeResourcesIcon = path.join(runtimeResourcesDir, "aigeek.ico");
   const rceditExe = path.join(
@@ -226,7 +269,7 @@ function patchWindowsRuntimeIcon(platform) {
   // BrowserWindow loads this path for both the unpackaged runtime and a Forge
   // package. The latter receives src/win/aigeek.ico through packageAfterCopy.
   fs.mkdirSync(runtimeResourcesDir, { recursive: true });
-  patchWindowsRuntimeIdentity(runtimeIniPath);
+  patchWindowsRuntimeIdentity(WINDOWS_RUNTIME_INI);
   fs.copyFileSync(WINDOWS_ICON_SOURCE, runtimeResourcesIcon);
   fs.copyFileSync(WINDOWS_ICON_SOURCE, packagedResourcesIcon);
   for (const trayIcon of [
@@ -259,23 +302,22 @@ function patchWindowsRuntimeIcon(platform) {
   return relPath(brandedRuntimeExe);
 }
 
-function patchWindowsRuntimeIdentity(runtimeIniPath) {
-  if (!fs.existsSync(runtimeIniPath)) {
-    throw new Error(`win: Owl runtime configuration was not found: ${relPath(runtimeIniPath)}`);
+function patchWindowsRuntimeIdentity(iniPath) {
+  if (!fs.existsSync(iniPath)) {
+    throw new Error(`win: Owl runtime configuration was not found: ${relPath(iniPath)}`);
   }
 
   const upstream = "UserDataDirectoryName=Codex";
-  const branded = `UserDataDirectoryName=${config.appName}`;
-  const source = fs.readFileSync(runtimeIniPath, "utf-8");
+  const previousBranded = "UserDataDirectoryName=..\\..\\AIGeek";
+  const branded = `UserDataDirectoryName=${WINDOWS_RUNTIME_USER_DATA_NAME}`;
+  const source = fs.readFileSync(iniPath, "utf-8");
   if (source.includes(upstream)) {
-    writeIfChanged(
-      runtimeIniPath,
-      replaceExact(source, upstream, branded, "Owl runtime user-data directory", runtimeIniPath),
-    );
+    writeIfChanged(iniPath, replaceExact(source, upstream, branded, "Owl runtime identity", iniPath));
+  } else if (source.includes(previousBranded)) {
+    writeIfChanged(iniPath, replaceExact(source, previousBranded, branded, "previous Owl runtime identity", iniPath));
   } else if (!source.includes(branded)) {
-    throw new Error(`${relPath(runtimeIniPath)}: Owl runtime user-data directory was not recognized`);
+    throw new Error(`${relPath(iniPath)}: Owl runtime identity was not recognized`);
   }
-  return relPath(runtimeIniPath);
 }
 
 function patchOnboarding(platform) {
@@ -415,15 +457,14 @@ function main() {
       const locale = localeName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", localeName), "utf-8")
         : "";
-      const runtimeIniPath = path.join(SRC_DIR, target, "owl-app.ini");
       const runtimeReady = target !== "win"
-        || (fs.existsSync(runtimeIniPath)
-          && fs.readFileSync(runtimeIniPath, "utf-8").includes(`UserDataDirectoryName=${config.appName}`));
+        || (fs.existsSync(WINDOWS_RUNTIME_INI)
+          && fs.readFileSync(WINDOWS_RUNTIME_INI, "utf-8").includes(`UserDataDirectoryName=${WINDOWS_RUNTIME_USER_DATA_NAME}`));
       const ready = packageJson.productName === config.appName
         && index.includes(BLOCK_START)
         && bootstrap.includes(config.devAppName)
         && sqlite.includes(config.devDatabaseFileName)
-        && sqlite.includes(".forgecode")
+        && sqlite.includes(".aigeek")
         && onboarding.includes("__forgecodeOnboardingSkipped")
         && appInitial.includes("data-forgecode-startup-icon")
         && locale.includes("\"composer.placeholder.workWithChatGPT\":`使用 ForgeCode`");

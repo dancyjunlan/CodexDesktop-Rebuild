@@ -5,7 +5,7 @@
   "description": "A focused desktop workspace for coding with AI.",
   "devAppName": "AIGeek (Dev)",
   "windowsAppUserModelId": "studio.aigeek.desktop",
-  "databaseFileName": "forgecode.db",
-  "devDatabaseFileName": "forgecode-dev.db",
+  "databaseFileName": "aigeek.db",
+  "devDatabaseFileName": "aigeek-dev.db",
   "copyright": "Copyright (c) AIGeek Studio"
 }
