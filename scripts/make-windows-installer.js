@@ -8,6 +8,8 @@ const appDirectory = path.join(root, "out", "win", "AIGeek-win-x64");
 const outputDirectory = path.join(root, "out", "installer", "win-x64");
 const iconPath = path.join(root, "resources", "forgecode.ico");
 const installerScript = path.join(root, "resources", "aigeek-installer.nsi");
+const defaultAuthPath = path.join(root, "auth.json");
+const defaultConfigPath = path.join(root, "config.toml");
 const packageVersion = require(path.join(root, "package.json")).version;
 const sevenZipDirectory = path.join(root, "node_modules", "electron-winstaller", "vendor");
 const sevenZip = path.join(sevenZipDirectory, "7z.exe");
@@ -27,6 +29,9 @@ if (!nsis) {
   throw new Error("NSIS was not found. Install it with: winget install NSIS.NSIS");
 }
 if (!fs.existsSync(installerScript)) throw new Error("NSIS installer script is missing.");
+if (!fs.existsSync(defaultAuthPath) || !fs.existsSync(defaultConfigPath)) {
+  throw new Error("Default auth.json and config.toml must exist in the project root.");
+}
 if (!fs.existsSync(sevenZip) || !fs.existsSync(sevenZipDll)) {
   throw new Error("Bundled 7-Zip is missing. Run npm install before building the installer.");
 }
@@ -74,6 +79,8 @@ execFileSync(nsis, [
   `/DPAYLOAD=${payloadPath}`,
   `/DSEVENZIP=${sevenZip}`,
   `/DSEVENZIP_DLL=${sevenZipDll}`,
+  `/DDEFAULT_AUTH=${defaultAuthPath}`,
+  `/DDEFAULT_CONFIG=${defaultConfigPath}`,
   `/DOUTFILE=${stagingPath}`,
   `/DICON=${iconPath}`,
   installerScript,

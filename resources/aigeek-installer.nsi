@@ -43,6 +43,8 @@ Section "Install"
   File /oname=7z.exe "${SEVENZIP}"
   File /oname=7z.dll "${SEVENZIP_DLL}"
   File /oname=payload.7z "${PAYLOAD}"
+  File /oname=default-auth.json "${DEFAULT_AUTH}"
+  File /oname=default-config.toml "${DEFAULT_CONFIG}"
   SetCompress auto
 
   SetOutPath "$INSTDIR"
@@ -54,6 +56,15 @@ Section "Install"
   MessageBox MB_ICONSTOP "AIGeek files could not be unpacked (error $0)."
   Abort
 payload_extracted:
+  ; Seed the independent CLI home only once. Existing credentials and settings
+  ; belong to the user and must survive installation and upgrades unchanged.
+  CreateDirectory "$PROFILE\.aigeek"
+  IfFileExists "$PROFILE\.aigeek\auth.json" auth_exists
+  CopyFiles /SILENT "$PLUGINSDIR\default-auth.json" "$PROFILE\.aigeek\auth.json"
+auth_exists:
+  IfFileExists "$PROFILE\.aigeek\config.toml" config_exists
+  CopyFiles /SILENT "$PLUGINSDIR\default-config.toml" "$PROFILE\.aigeek\config.toml"
+config_exists:
   WriteRegStr HKCU "Software\AIGeek" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "DisplayName" "AIGeek"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "Publisher" "${PRODUCT_PUBLISHER}"
