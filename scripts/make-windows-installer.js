@@ -8,6 +8,11 @@ const appDirectory = path.join(root, "out", "win", "AIGeek-win-x64");
 const outputDirectory = path.join(root, "out", "installer", "win-x64");
 const iconPath = path.join(root, "resources", "forgecode.ico");
 const installerScript = path.join(root, "resources", "aigeek-installer.nsi");
+const packageVersion = require(path.join(root, "package.json")).version;
+const sevenZipDirectory = path.join(root, "node_modules", "electron-winstaller", "vendor");
+const sevenZip = path.join(sevenZipDirectory, "7z.exe");
+const sevenZipDll = path.join(sevenZipDirectory, "7z.dll");
+const compressionThreads = process.env.AIGEEK_BUILD_THREADS || "on";
 const nsis = [
   path.join(process.env.ProgramFiles || "C:\\Program Files", "NSIS", "makensis.exe"),
   path.join(process.env.ProgramFiles || "C:\\Program Files", "NSIS", "Bin", "makensis.exe"),
@@ -22,14 +27,72 @@ if (!nsis) {
   throw new Error("NSIS was not found. Install it with: winget install NSIS.NSIS");
 }
 if (!fs.existsSync(installerScript)) throw new Error("NSIS installer script is missing.");
+if (!fs.existsSync(sevenZip) || !fs.existsSync(sevenZipDll)) {
+  throw new Error("Bundled 7-Zip is missing. Run npm install before building the installer.");
+}
+if (!/^(on|off|\d+)$/i.test(compressionThreads)) {
+  throw new Error("AIGEEK_BUILD_THREADS must be 'on', 'off', or a positive number.");
+}
 
 fs.mkdirSync(outputDirectory, { recursive: true });
 const installerPath = path.join(outputDirectory, "AIGeek-Setup.exe");
+const stagingPath = path.join(outputDirectory, "AIGeek-Setup.building.exe");
+const payloadPath = path.join(outputDirectory, "AIGeek-payload.7z");
+const payloadStagingPath = path.join(outputDirectory, "AIGeek-payload.building.7z");
+fs.rmSync(stagingPath, { force: true });
+fs.rmSync(payloadStagingPath, { force: true });
+
+// LZMA2 allows 7-Zip to compress the large Chromium payload on several CPU
+// threads. Disabling solid mode creates independent blocks, so the many
+// Chromium files can actually use those threads. NSIS then stores that archive
+// without trying to recompress it.
+console.log(`[installer] compressing app payload with LZMA2 (${compressionThreads === "on" ? "all CPU threads" : `${compressionThreads} threads`})...`);
+execFileSync(sevenZip, [
+  "a",
+  "-t7z",
+  "-m0=LZMA2",
+  "-mx=5",
+  `-mmt=${compressionThreads}`,
+  "-ms=off",
+  "-bsp0",
+  payloadStagingPath,
+  ".\\*",
+], { cwd: appDirectory, stdio: "inherit" });
+if (!fs.existsSync(payloadStagingPath) || fs.statSync(payloadStagingPath).size === 0) {
+  throw new Error("7-Zip did not produce a completed application payload.");
+}
+fs.rmSync(payloadPath, { force: true });
+fs.renameSync(payloadStagingPath, payloadPath);
+
+// NSIS writes its checksum only after compilation completes. Build to a
+// staging filename so the public installer path can never be a half-written
+// executable that reports an integrity error when opened during a build.
+console.log("[installer] wrapping compressed payload with NSIS...");
 execFileSync(nsis, [
   "/V2",
   `/DAPPDIR=${appDirectory}`,
-  `/DOUTFILE=${installerPath}`,
+  `/DPAYLOAD=${payloadPath}`,
+  `/DSEVENZIP=${sevenZip}`,
+  `/DSEVENZIP_DLL=${sevenZipDll}`,
+  `/DOUTFILE=${stagingPath}`,
   `/DICON=${iconPath}`,
   installerScript,
 ], { stdio: "inherit" });
-console.log(`[installer] created ${installerPath}`);
+if (!fs.existsSync(stagingPath) || fs.statSync(stagingPath).size === 0) {
+  throw new Error("NSIS did not produce a completed installer.");
+}
+let completedInstallerPath = installerPath;
+try {
+  fs.rmSync(installerPath, { force: true });
+  fs.renameSync(stagingPath, installerPath);
+} catch (error) {
+  // Windows does not allow an opened installer to be replaced. Keep the
+  // completed build available under a versioned name instead of failing after
+  // all compression work has already finished.
+  if (!fs.existsSync(stagingPath)) throw error;
+  completedInstallerPath = path.join(outputDirectory, `AIGeek-Setup-${packageVersion}.exe`);
+  fs.rmSync(completedInstallerPath, { force: true });
+  fs.renameSync(stagingPath, completedInstallerPath);
+  console.warn(`[installer] ${path.basename(installerPath)} is in use; created ${path.basename(completedInstallerPath)} instead.`);
+}
+console.log(`[installer] created ${completedInstallerPath}`);

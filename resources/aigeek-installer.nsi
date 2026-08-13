@@ -1,6 +1,6 @@
 Unicode true
 RequestExecutionLevel user
-SetCompressor /SOLID lzma
+SetCompressor /FINAL zlib
 SetDatablockOptimize on
 
 !include "MUI2.nsh"
@@ -35,8 +35,25 @@ done:
 FunctionEnd
 
 Section "Install"
+  ; The app payload was compressed by 7-Zip with parallel LZMA2. Keep it
+  ; uncompressed in the NSIS wrapper, then unpack it into the install folder.
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  SetCompress off
+  File /oname=7z.exe "${SEVENZIP}"
+  File /oname=7z.dll "${SEVENZIP_DLL}"
+  File /oname=payload.7z "${PAYLOAD}"
+  SetCompress auto
+
   SetOutPath "$INSTDIR"
-  File /r "${APPDIR}\*.*"
+  ; nsExec keeps the console-only 7-Zip extractor hidden while the installer
+  ; waits for it, instead of showing a separate terminal window to the user.
+  nsExec::Exec '"$PLUGINSDIR\7z.exe" x "$PLUGINSDIR\payload.7z" "-o$INSTDIR" -y'
+  Pop $0
+  StrCmp $0 0 payload_extracted
+  MessageBox MB_ICONSTOP "AIGeek files could not be unpacked (error $0)."
+  Abort
+payload_extracted:
   WriteRegStr HKCU "Software\AIGeek" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "DisplayName" "AIGeek"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "Publisher" "${PRODUCT_PUBLISHER}"

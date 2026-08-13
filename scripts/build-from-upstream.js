@@ -13,6 +13,8 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync, execFileSync } = require("child_process");
+const os = require("os");
+const asar = require("@electron/asar");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
@@ -37,22 +39,65 @@ function clearDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function copyRecursive(src, dest) {
-  fs.mkdirSync(dest, { recursive: true });
-  let count = 0;
-  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, e.name), d = path.join(dest, e.name);
-    if (e.isDirectory()) { count += copyRecursive(s, d); }
-    else if (e.isSymbolicLink()) {
-      const target = fs.readlinkSync(s);
-      try { fs.symlinkSync(target, d); } catch {}
-      count++;
-    } else {
-      fs.copyFileSync(s, d);
-      count++;
-    }
+function getCopyConcurrency() {
+  const configured = Number.parseInt(process.env.AIGEEK_COPY_CONCURRENCY || "", 10);
+  if (Number.isInteger(configured) && configured > 0) {
+    return Math.min(configured, 64);
   }
-  return count;
+
+  const cores = typeof os.availableParallelism === "function"
+    ? os.availableParallelism()
+    : os.cpus().length;
+  return Math.min(Math.max(cores, 4), 16);
+}
+
+async function copyRecursiveConcurrent(src, dest, options = {}) {
+  const { concurrency = getCopyConcurrency(), skip } = options;
+  const entries = [];
+
+  const collectEntries = (source, destination) => {
+    fs.mkdirSync(destination, { recursive: true });
+    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+      const sourcePath = path.join(source, entry.name);
+      const destinationPath = path.join(destination, entry.name);
+      const relativePath = path.relative(src, sourcePath);
+      if (skip?.(relativePath, entry)) continue;
+
+      if (entry.isDirectory()) {
+        collectEntries(sourcePath, destinationPath);
+      } else {
+        entries.push({ sourcePath, destinationPath, entry });
+      }
+    }
+  };
+
+  collectEntries(src, dest);
+  let next = 0;
+  let copied = 0;
+  const workerCount = Math.min(concurrency, entries.length);
+
+  const worker = async () => {
+    while (next < entries.length) {
+      const current = entries[next++];
+      if (current.entry.isSymbolicLink()) {
+        const target = await fs.promises.readlink(current.sourcePath);
+        try { await fs.promises.symlink(target, current.destinationPath); } catch {}
+      } else {
+        await fs.promises.copyFile(current.sourcePath, current.destinationPath);
+      }
+      copied++;
+    }
+  };
+
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return copied;
+}
+
+async function packAsar(source, destination) {
+  // Calling npx.cmd through spawn fails with EINVAL under the Node version
+  // bundled on this Windows machine. The project already depends on asar, so
+  // invoke its API directly and avoid a shell wrapper altogether.
+  await asar.createPackage(source, destination);
 }
 
 function resolveCodexVendor(platform) {
@@ -260,7 +305,7 @@ function buildMac(platform) {
 
 // ─── Windows build ──────────────────────────────────────────────
 
-function buildWin(platform) {
+async function buildWin(platform) {
   const platformDir = path.join(SRC_DIR, platform);
   const asarDir = path.join(platformDir, "_asar");
 
@@ -279,14 +324,32 @@ function buildWin(platform) {
     process.exit(1);
   }
 
-  // Copy app/ to output
+  // Copy the runtime while packing the patched ASAR. These paths are
+  // independent; omitting the upstream archive avoids duplicate I/O and a
+  // concurrent write to the same destination.
   const outAppDir = path.join(OUT_DIR, "win");
   clearDir(outAppDir);
   const outApp = path.join(outAppDir, "AIGeek-win-x64");
-  console.log("   [copy] MSIX app/ -> out/");
-  copyRecursive(appDir, outApp);
-
   const resourcesDir = path.join(outApp, "resources");
+  const asarPath = path.join(resourcesDir, "app.asar");
+  const copyConcurrency = getCopyConcurrency();
+  if (!process.env.UV_THREADPOOL_SIZE) {
+    process.env.UV_THREADPOOL_SIZE = String(copyConcurrency);
+  }
+  fs.mkdirSync(resourcesDir, { recursive: true });
+  console.log(`   [copy] MSIX app/ -> out/ (${copyConcurrency} workers)`);
+  const copyPromise = copyRecursiveConcurrent(appDir, outApp, {
+    concurrency: copyConcurrency,
+    skip: (relativePath, entry) =>
+      !entry.isDirectory() && relativePath === path.join("resources", "app.asar"),
+  });
+  console.log("   [asar pack] _asar/ -> app.asar (parallel with copy)");
+  const [copied] = await Promise.all([
+    copyPromise,
+    packAsar(asarDir, asarPath),
+  ]);
+  console.log(`   [copy] completed ${copied} files`);
+
   const iconPath = path.join(PROJECT_ROOT, "resources", "forgecode.ico");
   const upstreamRuntimeExe = path.join(outApp, "ChatGPT.exe");
   const brandedRuntimeExe = path.join(outApp, "AIGeekHost.exe");
@@ -299,12 +362,6 @@ function buildWin(platform) {
   ]) {
     fs.copyFileSync(iconPath, path.join(resourcesDir, trayIcon));
   }
-
-  const asarPath = path.join(resourcesDir, "app.asar");
-
-  // Repack patched ASAR
-  console.log("   [asar pack] _asar/ -> app.asar");
-  execSync(`npx asar pack "${asarDir}" "${asarPath}"`);
 
   // This MSIX runtime does not embed an app.asar header hash in its EXEs.
   // The previous byte-replacement attempt therefore never matched and could
@@ -423,7 +480,7 @@ async function main() {
   if (platform.startsWith("mac")) {
     buildMac(platform);
   } else {
-    buildWin(platform);
+    await buildWin(platform);
   }
 }
 
