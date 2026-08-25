@@ -16,9 +16,11 @@ const { branding: config, iconPath } = require("./branding-config");
 const RESOURCE_DIR = path.join(PROJECT_ROOT, "resources");
 const windowsBranding = config.windows;
 const MARK_SOURCE = iconPath("webview");
+const SMALL_MARK_SOURCE = iconPath("webviewSmall");
 const SHATTER_SOURCE = iconPath("webviewAnimation");
 const WINDOWS_ICON_SOURCE = iconPath("windows");
 const WEBVIEW_ICON_FILE_NAME = path.basename(config.icons.webview);
+const WEBVIEW_SMALL_ICON_FILE_NAME = path.basename(config.icons.webviewSmall);
 const WEBVIEW_ANIMATION_FILE_NAME = path.basename(config.icons.webviewAnimation);
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
@@ -83,6 +85,7 @@ function patchWebview(platform) {
   writeIfChanged(indexPath, index);
 
   fs.copyFileSync(MARK_SOURCE, path.join(webviewDir, WEBVIEW_ICON_FILE_NAME));
+  fs.copyFileSync(SMALL_MARK_SOURCE, path.join(webviewDir, WEBVIEW_SMALL_ICON_FILE_NAME));
   fs.copyFileSync(SHATTER_SOURCE, path.join(webviewDir, WEBVIEW_ANIMATION_FILE_NAME));
   const style = fs
     .readFileSync(STYLE_SOURCE, "utf-8")
@@ -442,6 +445,26 @@ function patchOnboarding(platform) {
       .replaceAll("ChatGPT", config.appName)
       .replaceAll("Codex", config.appName),
   );
+  const headerIconMarker = '"data-branding-onboarding-header-icon":!0';
+  const brandedHeaderIcon = "`img`,{alt:``,\"aria-hidden\":!0,className:`block size-full object-contain`,"
+    + headerIconMarker + ",draggable:!1,src:`./" + WEBVIEW_SMALL_ICON_FILE_NAME + "`}";
+  if (onboarding.includes(headerIconMarker)) {
+    onboarding = replaceSinglePattern(
+      onboarding,
+      /(`img`,\{alt:``,"aria-hidden":!0,className:`block size-full object-contain`,"data-branding-onboarding-header-icon":!0,draggable:!1,src:)`\.\/[^`]+`/g,
+      "$1`./" + WEBVIEW_SMALL_ICON_FILE_NAME + "`",
+      "previous onboarding header brand icon",
+      onboardingPath,
+    );
+  } else {
+    onboarding = replaceSinglePattern(
+      onboarding,
+      /\(0,([A-Za-z_$][\w$]*)\.jsx\)\(([A-Za-z_$][\w$]*),\{className:`block size-full`\}\)/g,
+      (_match, jsxNamespace) => "(0," + jsxNamespace + ".jsx)(" + brandedHeaderIcon + ")",
+      "onboarding header brand icon",
+      onboardingPath,
+    );
+  }
   const upstream = "):On=t[179];let kn;return t[180]!==pt";
   const branded = "):On=t[179];globalThis.__forgecodeOnboardingSkipped??(globalThis.__forgecodeOnboardingSkipped=!0,queueMicrotask(On));let kn;return t[180]!==pt";
 
@@ -698,6 +721,8 @@ async function main() {
         && sqlite.includes(config.homeDirectoryName)
         && onboarding.includes("__forgecodeOnboardingSkipped")
         && onboarding.includes("Customize " + config.appName)
+        && onboarding.includes('"data-branding-onboarding-header-icon":!0')
+        && onboarding.includes("src:`./" + WEBVIEW_SMALL_ICON_FILE_NAME + "`")
         && appInitial.includes("data-forgecode-startup-icon")
         && appInitial.includes("src:`./" + WEBVIEW_ICON_FILE_NAME + "`")
         && appInitial.includes("replyPlaceholder:`Reply`")
