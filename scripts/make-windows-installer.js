@@ -121,6 +121,51 @@ function prepareInstallerScript() {
   fs.writeFileSync(preparedInstallerScriptPath, `\uFEFF${source}`, "utf-8");
 }
 
+function validateRequiredNsisDefinitions(source, args) {
+  const suppliedDefinitions = new Set(args.flatMap((argument) => {
+    const match = /^\/D([^=]+)=/i.exec(argument);
+    return match ? [match[1].toUpperCase()] : [];
+  }));
+  const requiredDefinitions = [...source.matchAll(
+    /^!ifndef[ \t]+([A-Z0-9_]+)[ \t]*\r?\n!error\b/gm,
+  )].map((match) => match[1].toUpperCase());
+  const missingDefinitions = requiredDefinitions.filter(
+    (definition) => !suppliedDefinitions.has(definition),
+  );
+  if (missingDefinitions.length > 0) {
+    throw new Error(
+      `NSIS build arguments are missing required definitions: ${missingDefinitions.join(", ")}`,
+    );
+  }
+}
+
+const nsisArguments = [
+  "/V2",
+  `/DAPPDIR=${appDirectory}`,
+  `/DPAYLOAD=${payloadPath}`,
+  `/DSEVENZIP=${sevenZip}`,
+  `/DSEVENZIP_DLL=${sevenZipDll}`,
+  `/DDEFAULT_AUTH=${defaultAuthPath}`,
+  `/DDEFAULT_CONFIG=${preparedConfigPath}`,
+  `/DDATA=${dataPath}`,
+  `/DTOOLS=${toolsPath}`,
+  `/DTOOLS_DIRECTORY_NAME=${branding.toolsDirectoryName}`,
+  `/DPRODUCT_VERSION=${packageVersion}`,
+  `/DPRODUCT_NAME=${branding.appName}`,
+  `/DPRODUCT_PUBLISHER=${branding.author}`,
+  `/DAPP_USER_MODEL_ID=${windowsBranding.appUserModelId}`,
+  `/DHOME_DIRECTORY_NAME=${branding.homeDirectoryName}`,
+  `/DEXECUTABLE_NAME=${windowsBranding.executableName}`,
+  `/DLEGACY_PRODUCT_NAME=${windowsBranding.legacyProductName || ""}`,
+  `/DOUTFILE=${stagingPath}`,
+  `/DICON=${windowsIconPath}`,
+  preparedInstallerScriptPath,
+];
+
+validateRequiredNsisDefinitions(
+  fs.readFileSync(installerScript, "utf-8"),
+  nsisArguments,
+);
 prepareDefaultConfig();
 
 // LZMA2 allows 7-Zip to compress the large Chromium payload on several CPU
@@ -151,28 +196,7 @@ fs.renameSync(payloadStagingPath, payloadPath);
 console.log("[installer] wrapping compressed payload with NSIS...");
 try {
   prepareInstallerScript();
-  execFileSync(nsis, [
-    "/V2",
-    `/DAPPDIR=${appDirectory}`,
-    `/DPAYLOAD=${payloadPath}`,
-    `/DSEVENZIP=${sevenZip}`,
-    `/DSEVENZIP_DLL=${sevenZipDll}`,
-    `/DDEFAULT_AUTH=${defaultAuthPath}`,
-    `/DDEFAULT_CONFIG=${preparedConfigPath}`,
-    `/DDATA=${dataPath}`,
-    `/DTOOLS=${toolsPath}`,
-    `/DTOOLS_DIRECTORY_NAME=${branding.toolsDirectoryName}`,
-    `/DPRODUCT_VERSION=${packageVersion}`,
-    `/DPRODUCT_NAME=${branding.appName}`,
-    `/DPRODUCT_PUBLISHER=${branding.author}`,
-    `/DAPP_USER_MODEL_ID=${windowsBranding.appUserModelId}`,
-    `/DHOME_DIRECTORY_NAME=${branding.homeDirectoryName}`,
-    `/DEXECUTABLE_NAME=${windowsBranding.executableName}`,
-    `/DLEGACY_PRODUCT_NAME=${windowsBranding.legacyProductName || ""}`,
-    `/DOUTFILE=${stagingPath}`,
-    `/DICON=${windowsIconPath}`,
-    preparedInstallerScriptPath,
-  ], { stdio: "inherit" });
+  execFileSync(nsis, nsisArguments, { stdio: "inherit" });
 } finally {
   fs.rmSync(preparedInstallerScriptPath, { force: true });
 }
