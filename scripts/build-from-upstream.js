@@ -172,6 +172,10 @@ async function buildWindowsLauncher(destination, iconPath) {
   if (!fs.existsSync(WINDOWS_CSC)) {
     throw new Error("Windows C# compiler was not found; cannot build the AIGeek launcher");
   }
+  const launcherSource = fs.readFileSync(WINDOWS_LAUNCHER_SOURCE, "utf-8");
+  if (!launcherSource.includes(`AppUserModelId = "${branding.windowsAppUserModelId}"`)) {
+    throw new Error("Windows launcher AppUserModelID does not match branding.json");
+  }
   execFileSync(WINDOWS_CSC, [
     "/nologo",
     "/target:winexe",

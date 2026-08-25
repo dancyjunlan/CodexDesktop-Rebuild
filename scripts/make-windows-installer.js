@@ -83,6 +83,7 @@ execFileSync(nsis, [
   `/DDEFAULT_AUTH=${defaultAuthPath}`,
   `/DDEFAULT_CONFIG=${defaultConfigPath}`,
   `/DPRODUCT_VERSION=${packageVersion}`,
+  `/DAPP_USER_MODEL_ID=${branding.windowsAppUserModelId}`,
   `/DOUTFILE=${stagingPath}`,
   `/DICON=${iconPath}`,
   installerScript,

@@ -10,6 +10,9 @@ SetDatablockOptimize on
 !ifndef PRODUCT_VERSION
 !define PRODUCT_VERSION "0.0.0"
 !endif
+!ifndef APP_USER_MODEL_ID
+!define APP_USER_MODEL_ID "studio.aigeek.desktop.v2"
+!endif
 
 Name "${PRODUCT_NAME}"
 OutFile "${OUTFILE}"
@@ -78,6 +81,8 @@ config_exists:
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "UninstallString" "$INSTDIR\Uninstall.exe"
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "NoRepair" 1
+  WriteRegStr HKCU "Software\Classes\AppUserModelId\${APP_USER_MODEL_ID}" "DisplayName" "${PRODUCT_NAME}"
+  WriteRegStr HKCU "Software\Classes\AppUserModelId\${APP_USER_MODEL_ID}" "IconUri" "$INSTDIR\AIGeek.exe"
   CreateDirectory "$SMPROGRAMS\AIGeek"
   ; Create shortcuts through the branded launcher so the shell link carries
   ; System.AppUserModel.ID=studio.aigeek.desktop.v2. Without this property,
@@ -102,6 +107,7 @@ Section "Uninstall"
   Delete "$SMPROGRAMS\AIGeek\AIGeek.lnk"
   RMDir "$SMPROGRAMS\AIGeek"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek"
+  DeleteRegKey HKCU "Software\Classes\AppUserModelId\${APP_USER_MODEL_ID}"
   DeleteRegKey HKCU "Software\AIGeek"
   RMDir /r "$INSTDIR"
 SectionEnd

@@ -249,6 +249,34 @@ function patchMainProcess(platform) {
   } else if (!main.includes(brandedWindowIconPath)) {
     throw new Error(`${relPath(mainPath)}: Windows window icon path was not recognized`);
   }
+  const upstreamWindowAppDetails = "webPreferences:j});this.applyWindowBackdrop(P,o,!0);let F=P.webContents";
+  const brandedWindowAppDetails = "webPreferences:j});process.platform===`win32`&&P.setAppDetails?.({appId:`"
+    + config.windowsAppUserModelId
+    + "`,appIconPath:this.options.windowIconPath??process.execPath,appIconIndex:0,relaunchCommand:(0,p.join)((0,p.dirname)(process.execPath),`AIGeek.exe`),relaunchDisplayName:`"
+    + config.appName
+    + "`}),this.applyWindowBackdrop(P,o,!0);let F=P.webContents";
+  const previousWindowAppDetails = "webPreferences:j});process.platform===`win32`&&P.setAppDetails?.({appId:`studio.aigeek.desktop`,appIconPath:this.options.windowIconPath??process.execPath,appIconIndex:0,relaunchCommand:(0,p.join)((0,p.dirname)(process.execPath),`AIGeek.exe`),relaunchDisplayName:`"
+    + config.appName
+    + "`}),this.applyWindowBackdrop(P,o,!0);let F=P.webContents";
+  if (main.includes(upstreamWindowAppDetails)) {
+    main = replaceExact(
+      main,
+      upstreamWindowAppDetails,
+      brandedWindowAppDetails,
+      "Windows window app details",
+      mainPath,
+    );
+  } else if (main.includes(previousWindowAppDetails)) {
+    main = replaceExact(
+      main,
+      previousWindowAppDetails,
+      brandedWindowAppDetails,
+      "previous Windows window app details",
+      mainPath,
+    );
+  } else if (!main.includes(brandedWindowAppDetails)) {
+    throw new Error(`${relPath(mainPath)}: Windows window app details were not recognized`);
+  }
   writeIfChanged(mainPath, main);
 
   const sqlitePath = path.join(buildDir, sqliteName);
@@ -505,6 +533,11 @@ async function main() {
         /^zh-CN-.*\.js$/.test(file),
       );
       const bootstrap = bootstrapName ? fs.readFileSync(path.join(buildDir, bootstrapName), "utf-8") : "";
+      const mainName = fs.readdirSync(buildDir).find((file) => {
+        if (!/^main-.*\.js$/.test(file)) return false;
+        return fs.readFileSync(path.join(buildDir, file), "utf-8").includes("windowIconPath:j,globalState");
+      });
+      const mainSource = mainName ? fs.readFileSync(path.join(buildDir, mainName), "utf-8") : "";
       const sqlite = sqliteName ? fs.readFileSync(path.join(buildDir, sqliteName), "utf-8") : "";
       const onboarding = onboardingName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", onboardingName), "utf-8")
@@ -526,6 +559,9 @@ async function main() {
         && index.includes(BLOCK_START)
         && bootstrap.includes(config.devAppName)
         && bootstrap.includes(config.windowsAppUserModelId)
+        && (target !== "win"
+          || (mainSource.includes("setAppDetails")
+            && mainSource.includes("appId:`" + config.windowsAppUserModelId + "`")))
         && sqlite.includes(config.devDatabaseFileName)
         && sqlite.includes(".aigeek")
         && onboarding.includes("__forgecodeOnboardingSkipped")
