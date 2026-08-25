@@ -12,6 +12,7 @@ function syncBrandingMetadata() {
     productName: branding.appName,
     author: branding.author,
     description: branding.description,
+    codexAppBrand: branding.appBrand,
   };
   const serialized = JSON.stringify(next, null, 2) + "\n";
   if (fs.readFileSync(packagePath, "utf-8") !== serialized) {

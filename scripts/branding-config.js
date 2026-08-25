@@ -15,6 +15,7 @@ function requireString(value, name) {
 function requireBranding() {
   for (const name of [
     "appName",
+    "appBrand",
     "sidebarName",
     "homeGreeting",
     "packageName",
@@ -28,6 +29,9 @@ function requireBranding() {
     "copyright",
   ]) {
     requireString(branding[name], name);
+  }
+  if (!["codex", "chatgpt"].includes(branding.appBrand)) {
+    throw new Error("branding.json: appBrand must be either codex or chatgpt");
   }
   if (!branding.homeDirectoryName.startsWith(".")) {
     throw new Error("branding.json: homeDirectoryName must start with a dot");

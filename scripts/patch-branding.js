@@ -53,11 +53,9 @@ function patchPackage(platform) {
   packageJson.productName = config.appName;
   packageJson.author = config.author;
   packageJson.description = config.description;
-  // This is an internal runtime selector, not user-facing product text. Keep
-  // the upstream value so the extracted Electron application follows its
-  // supported startup path; the visible product name and Windows identity are
-  // patched independently below.
-  packageJson.codexAppBrand = "chatgpt";
+  // Select the upstream page variant from branding.json. The product name and
+  // Windows identity are patched independently below.
+  packageJson.codexAppBrand = config.appBrand;
   delete packageJson.codexWindowsPackageIdentity;
   delete packageJson.codexWindowsPackagePublisher;
   writeIfChanged(packagePath, JSON.stringify(packageJson, null, 2) + "\n");
@@ -684,6 +682,7 @@ async function main() {
             WINDOWS_ICON_SOURCE,
           ));
       const ready = packageJson.productName === config.appName
+        && packageJson.codexAppBrand === config.appBrand
         && index.includes(BLOCK_START)
         && bootstrap.includes(config.devAppName)
         && bootstrap.includes(windowsBranding.appUserModelId)
