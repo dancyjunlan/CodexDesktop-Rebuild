@@ -45,13 +45,12 @@ async function brandWindowsExecutable(exePath, iconPath, versionStrings = {}) {
   const executable = PELibrary.NtExecutable.from(source, { ignoreCert: true });
   const resources = PELibrary.NtExecutableResource.from(executable);
   const iconFile = ResEdit.Data.IconFile.from(fs.readFileSync(iconPath));
-  const primaryGroups = ResEdit.Resource.IconGroupEntry
+  const existingPrimaryGroups = ResEdit.Resource.IconGroupEntry
     .fromEntries(resources.entries)
     .filter(isPrimaryIconGroup);
-
-  if (primaryGroups.length === 0) {
-    throw new Error(`${exePath}: no primary Windows icon resource was found`);
-  }
+  const primaryGroups = existingPrimaryGroups.length > 0
+    ? existingPrimaryGroups
+    : [{ id: 1, lang: 1033 }];
 
   for (const group of primaryGroups) {
     ResEdit.Resource.IconGroupEntry.replaceIconsForResource(
