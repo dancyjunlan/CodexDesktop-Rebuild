@@ -4,6 +4,8 @@ SetCompressor /FINAL zlib
 SetDatablockOptimize on
 
 !include "MUI2.nsh"
+!include "StrFunc.nsh"
+${Using:StrFunc} StrRep
 
 !ifndef PRODUCT_NAME
 !error "PRODUCT_NAME must be supplied by the branding build configuration"
@@ -25,6 +27,9 @@ SetDatablockOptimize on
 !endif
 !ifndef LEGACY_PRODUCT_NAME
 !define LEGACY_PRODUCT_NAME ""
+!endif
+!ifndef TOOLS_DIRECTORY_NAME
+!error "TOOLS_DIRECTORY_NAME must be supplied by the branding build configuration"
 !endif
 
 Name "${PRODUCT_NAME}"
@@ -56,6 +61,30 @@ done:
   Delete "$SMPROGRAMS\${LEGACY_PRODUCT_NAME} Studio\${LEGACY_PRODUCT_NAME}.lnk"
 FunctionEnd
 
+Function SeedDefaultConfig
+  FileOpen $0 "$PLUGINSDIR\default-config.toml" r
+  IfErrors seed_config_failed
+  FileOpen $1 "$PROFILE\${HOME_DIRECTORY_NAME}\config.toml" w
+  IfErrors seed_config_failed
+  ; TOML basic strings require Windows separators to be escaped as `\\`.
+  StrCpy $4 "$PROFILE\${HOME_DIRECTORY_NAME}\${TOOLS_DIRECTORY_NAME}"
+  ${StrRep} $5 $4 "\" "\\"
+seed_config_read:
+  ClearErrors
+  FileRead $0 $2
+  IfErrors seed_config_done
+  ${StrRep} $3 $2 "__BRANDING_HOME_TOOLS__" $5
+  FileWrite $1 $3
+  Goto seed_config_read
+seed_config_done:
+  FileClose $0
+  FileClose $1
+  Return
+seed_config_failed:
+  MessageBox MB_ICONSTOP "${PRODUCT_NAME} 默认配置文件无法释放。"
+  Abort
+FunctionEnd
+
 Section "Install"
   ; The app payload was compressed by 7-Zip with parallel LZMA2. Keep it
   ; uncompressed in the NSIS wrapper, then unpack it into the install folder.
@@ -81,11 +110,13 @@ payload_extracted:
   ; Seed the independent CLI home only once. Existing credentials and settings
   ; belong to the user and must survive installation and upgrades unchanged.
   CreateDirectory "$PROFILE\${HOME_DIRECTORY_NAME}"
+  SetOutPath "$PROFILE\${HOME_DIRECTORY_NAME}\${TOOLS_DIRECTORY_NAME}"
+  File /r "${TOOLS}\*.*"
   IfFileExists "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json" auth_exists
   CopyFiles /SILENT "$PLUGINSDIR\default-auth.json" "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json"
 auth_exists:
   IfFileExists "$PROFILE\${HOME_DIRECTORY_NAME}\config.toml" config_exists
-  CopyFiles /SILENT "$PLUGINSDIR\default-config.toml" "$PROFILE\${HOME_DIRECTORY_NAME}\config.toml"
+  Call SeedDefaultConfig
 config_exists:
   WriteRegStr HKCU "Software\${PRODUCT_NAME}" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayName" "${PRODUCT_NAME}"

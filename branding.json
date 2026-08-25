@@ -23,6 +23,12 @@
   },
   "devAppName": "IDP (Dev)",
   "homeDirectoryName": ".idp",
+  "toolsDirectoryName": "tools",
+  "bundledMcpServer": {
+    "section": "s3d-local",
+    "commandPath": "package\\mcp\\s3d-mcp.exe",
+    "cwdPath": "package"
+  },
   "windows": {
     "appUserModelId": "studio.idp.desktop.v2",
     "trayGuid": "0f6c3f6f-6752-4cd3-a80b-641391a9fa70",

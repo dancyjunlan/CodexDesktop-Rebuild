@@ -17,11 +17,13 @@ const windowsIconPath = iconPath("windows");
 const installerScript = path.join(root, "resources", "aigeek-installer.nsi");
 const defaultAuthPath = path.join(root, "auth.json");
 const defaultConfigPath = path.join(root, "config.toml");
+const toolsPath = path.join(root, branding.toolsDirectoryName);
 const packageVersion = require(path.join(root, "package.json")).version;
 const sevenZipDirectory = path.join(root, "node_modules", "electron-winstaller", "vendor");
 const sevenZip = path.join(sevenZipDirectory, "7z.exe");
 const sevenZipDll = path.join(sevenZipDirectory, "7z.dll");
 const compressionThreads = process.env.AIGEEK_BUILD_THREADS || "on";
+const HOME_TOOLS_TOKEN = "__BRANDING_HOME_TOOLS__";
 const nsis = [
   path.join(process.env.ProgramFiles || "C:\\Program Files", "NSIS", "makensis.exe"),
   path.join(process.env.ProgramFiles || "C:\\Program Files", "NSIS", "Bin", "makensis.exe"),
@@ -39,6 +41,9 @@ if (!fs.existsSync(installerScript)) throw new Error("NSIS installer script is m
 if (!fs.existsSync(defaultAuthPath) || !fs.existsSync(defaultConfigPath)) {
   throw new Error("Default auth.json and config.toml must exist in the project root.");
 }
+if (!fs.existsSync(toolsPath) || !fs.statSync(toolsPath).isDirectory()) {
+  throw new Error(`Bundled tools directory is missing: ${branding.toolsDirectoryName}`);
+}
 if (!fs.existsSync(sevenZip) || !fs.existsSync(sevenZipDll)) {
   throw new Error("Bundled 7-Zip is missing. Run npm install before building the installer.");
 }
@@ -52,8 +57,56 @@ const installerPath = path.join(outputDirectory, windowsBranding.installerFileNa
 const stagingPath = path.join(outputDirectory, `${installerFile.name}.building${installerFile.ext}`);
 const payloadPath = path.join(outputDirectory, `${installerFile.name}-payload.7z`);
 const payloadStagingPath = path.join(outputDirectory, `${installerFile.name}-payload.building.7z`);
+const preparedConfigPath = path.join(outputDirectory, `${installerFile.name}-default-config.toml`);
 fs.rmSync(stagingPath, { force: true });
 fs.rmSync(payloadStagingPath, { force: true });
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceTomlKeyInSection(source, sectionName, key, value) {
+  const header = `[mcp_servers.${sectionName}]`;
+  const sectionStart = source.indexOf(header);
+  if (sectionStart === -1) {
+    throw new Error(`Config section is missing: ${header}`);
+  }
+
+  const nextSection = source.indexOf("\n[", sectionStart + header.length);
+  const sectionEnd = nextSection === -1 ? source.length : nextSection;
+  const section = source.slice(sectionStart, sectionEnd);
+  const keyPattern = new RegExp(`^[ \\t]*${escapeRegExp(key)}[ \\t]*=.*$`, "m");
+  if (!keyPattern.test(section)) {
+    throw new Error(`Config key is missing: ${header}.${key}`);
+  }
+
+  const tomlLine = `${key} = "${value}"`;
+  const updatedSection = section.replace(keyPattern, (match) =>
+    tomlLine + (match.endsWith("\r") ? "\r" : ""),
+  );
+  return source.slice(0, sectionStart) + updatedSection + source.slice(sectionEnd);
+}
+
+function prepareDefaultConfig() {
+  const mcp = branding.bundledMcpServer;
+  const toTomlPath = (relativePath) => `${HOME_TOOLS_TOKEN}\\\\${relativePath.replaceAll("\\", "\\\\")}`;
+  let config = fs.readFileSync(defaultConfigPath, "utf-8");
+  config = replaceTomlKeyInSection(
+    config,
+    mcp.section,
+    "command",
+    toTomlPath(mcp.commandPath),
+  );
+  config = replaceTomlKeyInSection(
+    config,
+    mcp.section,
+    "cwd",
+    toTomlPath(mcp.cwdPath),
+  );
+  fs.writeFileSync(preparedConfigPath, config, "utf-8");
+}
+
+prepareDefaultConfig();
 
 // LZMA2 allows 7-Zip to compress the large Chromium payload on several CPU
 // threads. Disabling solid mode creates independent blocks, so the many
@@ -88,7 +141,9 @@ execFileSync(nsis, [
   `/DSEVENZIP=${sevenZip}`,
   `/DSEVENZIP_DLL=${sevenZipDll}`,
   `/DDEFAULT_AUTH=${defaultAuthPath}`,
-  `/DDEFAULT_CONFIG=${defaultConfigPath}`,
+  `/DDEFAULT_CONFIG=${preparedConfigPath}`,
+  `/DTOOLS=${toolsPath}`,
+  `/DTOOLS_DIRECTORY_NAME=${branding.toolsDirectoryName}`,
   `/DPRODUCT_VERSION=${packageVersion}`,
   `/DPRODUCT_NAME=${branding.appName}`,
   `/DPRODUCT_PUBLISHER=${branding.author}`,

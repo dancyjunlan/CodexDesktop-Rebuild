@@ -36,6 +36,19 @@ function requireBranding() {
   if (!branding.homeDirectoryName.startsWith(".")) {
     throw new Error("branding.json: homeDirectoryName must start with a dot");
   }
+  requireString(branding.toolsDirectoryName, "toolsDirectoryName");
+  if (path.isAbsolute(branding.toolsDirectoryName) || branding.toolsDirectoryName.includes("..")) {
+    throw new Error("branding.json: toolsDirectoryName must be a relative directory name");
+  }
+  for (const name of ["section", "commandPath", "cwdPath"]) {
+    requireString(branding.bundledMcpServer?.[name], `bundledMcpServer.${name}`);
+  }
+  for (const name of ["commandPath", "cwdPath"]) {
+    const value = branding.bundledMcpServer[name];
+    if (path.isAbsolute(value) || value.includes("..")) {
+      throw new Error(`branding.json: bundledMcpServer.${name} must be a relative path`);
+    }
+  }
 
   for (const name of [
     "appUserModelId",
