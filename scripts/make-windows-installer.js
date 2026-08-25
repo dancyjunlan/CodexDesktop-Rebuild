@@ -2,6 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { TextDecoder } = require("util");
 const {
   PROJECT_ROOT,
   branding,
@@ -97,10 +98,22 @@ function replaceTomlKeyInSection(source, sectionName, key, value) {
   return source.slice(0, sectionStart) + updatedSection + source.slice(sectionEnd);
 }
 
+function readUtf8(filePath) {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(fs.readFileSync(filePath));
+  } catch {
+    throw new Error(`${filePath} must contain valid UTF-8 text.`);
+  }
+}
+
+function stripCommentOnlyLines(source) {
+  return source.split(/\r?\n/).filter((line) => !/^\s*#/.test(line)).join("\n");
+}
+
 function prepareDefaultConfig() {
   const mcp = branding.bundledMcpServer;
   const toTomlPath = (relativePath) => `${HOME_TOOLS_TOKEN}\\\\${relativePath.replaceAll("\\", "\\\\")}`;
-  let config = fs.readFileSync(defaultConfigPath, "utf-8");
+  let config = readUtf8(defaultConfigPath);
   config = replaceTomlKeyInSection(
     config,
     mcp.section,
@@ -113,6 +126,13 @@ function prepareDefaultConfig() {
     "cwd",
     toTomlPath(mcp.cwdPath),
   );
+  if (branding.defaultConfig.stripInstallerComments) {
+    // NSIS FileRead/FileWrite transcodes text and can corrupt UTF-8 comments.
+    config = stripCommentOnlyLines(config);
+    if (/[^\x00-\x7f]/.test(config)) {
+      throw new Error("Default config still contains non-ASCII values after comments were removed.");
+    }
+  }
   fs.writeFileSync(preparedConfigPath, config, "utf-8");
 }
 

@@ -4,10 +4,9 @@
  * model ID and its reasoning-effort capabilities.
  *
  * The renderer receives every model advertised by the local app server. The
- * picker keeps every model advertised by the local app server, while replacing
- * the active model's display name from branding.json. Selecting an option
- * therefore submits the selected model instead of trapping the picker on the
- * current config model.
+ * picker exposes only the active config model and replaces its display name
+ * from branding.json. Its real model ID and reasoning-effort capabilities stay
+ * intact, so changing effort still writes the configured model.
  */
 const fs = require("fs");
 const path = require("path");
@@ -15,10 +14,11 @@ const { relPath, SRC_DIR } = require("./patch-util");
 const { branding } = require("./branding-config");
 
 const MODEL_LIST_MARKER = ",b=v?.models;";
-const MODEL_LIST_REPLACEMENT = `,b=v?.models?.map(e=>({...e,displayName:e.model===_?\`${branding.ui.modelDisplayName}\`:e.displayName,isDefault:e.model===_}));`;
-const PREVIOUS_MODEL_LIST_REPLACEMENT =
-  ",b=v?.models?.filter(e=>e.model===_).map(e=>({...e,displayName:`glm-5.2`,isDefault:!0}));";
-const PATCHED_MODEL_LIST_MARKER = "v?.models?.map(e=>({...e,displayName:e.model===_?";
+const MODEL_LIST_REPLACEMENT = `,b=v?.models?.filter(e=>e.model===_).map(e=>({...e,displayName:${JSON.stringify(branding.ui.modelDisplayName)},isDefault:!0}));`;
+const PREVIOUS_SINGLE_MODEL_LIST_PATTERN =
+  /,b=v\?\.models\?\.filter\(e=>e\.model===_\)\.map\(e=>\(\{\.\.\.e,displayName:(?:`[^`]*`|"(?:\\.|[^"\\])*"),isDefault:!0\}\)\);/;
+const PREVIOUS_FULL_MODEL_LIST_PATTERN =
+  /,b=v\?\.models\?\.map\(e=>\(\{\.\.\.e,displayName:e\.model===_\?`[^`]*`:e\.displayName,isDefault:e\.model===_\}\)\);/;
 
 const POWER_FALLBACK_MARKER =
   "let i=Lms(Vms.filter(({reasoningEffort:e})=>!n||e!==`xhigh`),e);return i.length>=3?i:[]";
@@ -33,6 +33,19 @@ function replaceOnce(source, marker, replacement) {
     code: source.slice(0, index) + replacement + source.slice(index + marker.length),
     changed: true,
   };
+}
+
+function replaceModelList(source) {
+  if (source.includes(MODEL_LIST_MARKER)) {
+    return replaceOnce(source, MODEL_LIST_MARKER, MODEL_LIST_REPLACEMENT);
+  }
+  if (source.includes(MODEL_LIST_REPLACEMENT)) return { code: source, changed: false };
+  const previousSingleList = PREVIOUS_SINGLE_MODEL_LIST_PATTERN.exec(source)?.[0];
+  if (previousSingleList) return replaceOnce(source, previousSingleList, MODEL_LIST_REPLACEMENT);
+  const previousFullList = PREVIOUS_FULL_MODEL_LIST_PATTERN.exec(source)?.[0];
+  return previousFullList
+    ? replaceOnce(source, previousFullList, MODEL_LIST_REPLACEMENT)
+    : { code: source, changed: false };
 }
 
 function findTargets(platform) {
@@ -53,9 +66,10 @@ function findTargets(platform) {
       const source = fs.readFileSync(filePath, "utf8");
       if (
         source.includes(MODEL_LIST_MARKER)
-        || source.includes(PREVIOUS_MODEL_LIST_REPLACEMENT)
+        || PREVIOUS_SINGLE_MODEL_LIST_PATTERN.test(source)
+        || PREVIOUS_FULL_MODEL_LIST_PATTERN.test(source)
         || source.includes(POWER_FALLBACK_MARKER)
-        || source.includes(PATCHED_MODEL_LIST_MARKER)
+        || source.includes(MODEL_LIST_REPLACEMENT)
         || source.includes(PATCHED_POWER_FALLBACK_MARKER)
       ) {
         targets.push({ platform: name, path: filePath });
@@ -79,9 +93,7 @@ function main() {
   let total = 0;
   for (const target of targets) {
     const source = fs.readFileSync(target.path, "utf8");
-    const modelList = source.includes(MODEL_LIST_MARKER)
-      ? replaceOnce(source, MODEL_LIST_MARKER, MODEL_LIST_REPLACEMENT)
-      : replaceOnce(source, PREVIOUS_MODEL_LIST_REPLACEMENT, MODEL_LIST_REPLACEMENT);
+    const modelList = replaceModelList(source);
     const powerFallback = replaceOnce(
       modelList.code,
       POWER_FALLBACK_MARKER,

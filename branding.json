@@ -28,7 +28,7 @@
     "hideWindowsSandboxBanner": true,
     "hideApiKeyAuthMenuItem": true,
     "hideLogoutMenuItem": true,
-    "hideModelReasoningEffort": true,
+    "hideModelReasoningEffort": false,
     "modelPickerLabel": "修改模型",
     "modelDisplayName": "glm-5.2",
     "hiddenWindowsSandboxLabels": [
@@ -52,6 +52,10 @@
       "Model",
       "模型"
     ]
+  },
+  "defaultConfig": {
+    "stripInstallerComments": true,
+    "repairInvalidUtf8OnStartup": true
   },
   "devAppName": "IDP (Dev)",
   "homeDirectoryName": ".aigeek",

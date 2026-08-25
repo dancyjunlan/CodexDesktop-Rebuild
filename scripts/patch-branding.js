@@ -171,10 +171,14 @@ function patchMainProcess(platform) {
   const brandedWindowsTrayGuid = "case n.js.Prod:return`" + windowsBranding.trayGuid + "`";
   const brandedAppDataPath = "a.app.setPath(`appData`,o.join(a.app.getPath(`appData`),`..`,`" + config.appName + "`))";
   const brandedCodeHome = config.homeDirectoryName;
+  const invalidConfigRepairMarker = "forgecode-repair-invalid-config-utf8";
+  const invalidConfigRepair = config.defaultConfig.repairInvalidUtf8OnStartup
+    ? "let n=o.join(t,`config.toml`),r=c.existsSync(n)?c.readFileSync(n):null;if(r&&!require(`node:buffer`).isUtf8(r)){let e=Buffer.from(r.toString(`latin1`).split(/\\r?\\n/).filter(e=>!e.trimStart().startsWith(`#`)).join(`\\n`),`latin1`);require(`node:buffer`).isUtf8(e)&&c.writeFileSync(n,e)/*" + invalidConfigRepairMarker + "*/}"
+    : "";
   const homeMigrationPrefix = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`";
   const homeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`"
     + brandedCodeHome + "`);process.env.CODEX_HOME=t,delete process.env.CODEX_ELECTRON_USER_DATA_PATH;try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`"
-    + brandedCodeHome + "`),`utf8`):c.copyFileSync(o.join(e,n),r))}}catch(e){}})()";
+    + brandedCodeHome + "`),`utf8`):c.copyFileSync(o.join(e,n),r))}" + invalidConfigRepair + "}catch(e){}})()";
   const upstreamSingleInstanceExit = "if(!(!$||a.app.requestSingleInstanceLock()))";
   const brandedSingleInstanceExit = "if(!(!$||!0))";
   const previousAppNameForBuildFlavor = "n===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
@@ -829,6 +833,9 @@ async function main() {
       const brandingScript = fs.existsSync(brandingScriptPath)
         ? fs.readFileSync(brandingScriptPath, "utf-8")
         : "";
+      const modelReasoningVisibilityReady = brandingScript.includes(
+        `hideModelReasoningEffort: ${JSON.stringify(config.ui.hideModelReasoningEffort)}`,
+      );
       const buildDir = path.join(asarDir, ".vite", "build");
       const bootstrapName = fs.readdirSync(buildDir).find((file) => /^bootstrap-.*\.js$/.test(file));
       const sqliteName = fs.readdirSync(buildDir).find((file) => {
@@ -846,6 +853,8 @@ async function main() {
         /^zh-CN-.*\.js$/.test(file),
       );
       const bootstrap = bootstrapName ? fs.readFileSync(path.join(buildDir, bootstrapName), "utf-8") : "";
+      const invalidConfigRepairReady = !config.defaultConfig.repairInvalidUtf8OnStartup
+        || bootstrap.includes("forgecode-repair-invalid-config-utf8");
       const mainName = fs.readdirSync(buildDir).find((file) => {
         if (!/^main-.*\.js$/.test(file)) return false;
         const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
@@ -890,9 +899,11 @@ async function main() {
         && index.includes(`forgecode-branding.js?v=${BRAND_ASSET_REVISION}`)
         && brandingScript.includes(TITLEBAR_ICON_FILE_NAME)
         && brandingScript.includes(config.assetRevision)
+        && modelReasoningVisibilityReady
         && fs.existsSync(path.join(asarDir, "webview", TITLEBAR_ICON_FILE_NAME))
         && bootstrap.includes(config.devAppName)
         && bootstrap.includes(windowsBranding.appUserModelId)
+        && invalidConfigRepairReady
         && (target !== "win"
           || (mainSource.includes("setAppDetails")
             && mainSource.includes("appId:`" + windowsBranding.appUserModelId + "`")))

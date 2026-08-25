@@ -102,6 +102,11 @@ function requireBranding() {
       throw new Error(`branding.json: ui.${name} must be an array of non-empty strings`);
     }
   }
+  for (const name of ["stripInstallerComments", "repairInvalidUtf8OnStartup"]) {
+    if (typeof branding.defaultConfig?.[name] !== "boolean") {
+      throw new Error(`branding.json: defaultConfig.${name} must be a boolean`);
+    }
+  }
   return branding;
 }
 
