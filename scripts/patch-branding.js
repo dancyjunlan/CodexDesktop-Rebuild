@@ -47,6 +47,9 @@ const NATIVE_LOGOUT_MENU_CLEANUP = "if(Gt){let e=Gt.items.findIndex(e=>e.label==
 const UPSTREAM_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem(se))";
 const BRANDED_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem({...se,visible:!1}))";
 const PERMISSION_MODE_SELECTION_MARKER = "forgecode-enable-permission-mode-selection";
+const PERMISSION_MODE_HEADER_MARKER = "forgecode-hide-permission-mode-header";
+const PERMISSION_MODE_HEADER_UPSTREAM = "ot=(0,K2.jsx)(zH.Title,{children:(0,K2.jsxs)(`div`,{className:`flex w-full min-w-0 items-start gap-4`,children:[at,(0,K2.jsx)(`button`,{type:`button`,className:`shrink-0 cursor-interaction underline underline-offset-2 hover:text-token-description-foreground`,onClick:_Us,children:(0,K2.jsx)(Z,{defaultMessage:`Learn more`,description:`Label on a button that opens the docs page for Codex action permissions and escalation.`,id:`composer.permissionsDropdown.learnMore`})})]})})";
+const PERMISSION_MODE_HEADER_BRANDED = `ot=null/*${PERMISSION_MODE_HEADER_MARKER}*/`;
 const FULL_ACCESS_RISK_DESCRIPTION_MARKER = "forgecode-hide-full-access-risk-description";
 const FULL_ACCESS_APP_NAME_MARKER = "forgecode-full-access-app-name";
 const FULL_ACCESS_RISK_DESCRIPTION_UPSTREAM = "let N;t[37]!==l||t[38]!==M?(N=(0,G2.jsx)($L,{className:`text-token-description-foreground`,children:(0,G2.jsx)(`p`,{className:`text-pretty`,children:(0,G2.jsx)(Z,{id:`composer.mode.agentMode.fullAccessConfirm.riskDescriptionByModel`,defaultMessage:`This comes with risks like loss or exposure of sensitive data and prompt injection. {isCyberModel, select, true {We strongly recommend selecting \"Approve for me\" instead, and customizing the reviewer policy for your use case.} other {You can turn this off.}} <link>Learn more</link>`,description:`Risk text in the full-access confirmation dialog; cybersecurity models recommend the safer Approve for me permission mode and customizing its reviewer policy instead of explaining that full access can be turned off`,values:{isCyberModel:l,link:M}})})}),t[37]=l,t[38]=M,t[39]=N):N=t[39];let P;";
@@ -852,6 +855,30 @@ function patchRendererPermissionDialog(platform) {
 
   const appInitialPath = path.join(assetsDir, appInitialName);
   let source = fs.readFileSync(appInitialPath, "utf-8");
+  if (config.ui.hidePermissionModeHeader) {
+    if (source.includes(PERMISSION_MODE_HEADER_UPSTREAM)) {
+      source = replaceExact(
+        source,
+        PERMISSION_MODE_HEADER_UPSTREAM,
+        PERMISSION_MODE_HEADER_BRANDED,
+        "permission mode header",
+        appInitialPath,
+      );
+    } else if (!source.includes(PERMISSION_MODE_HEADER_MARKER)) {
+      throw new Error(`${relPath(appInitialPath)}: permission mode header was not recognized`);
+    }
+  } else if (source.includes(PERMISSION_MODE_HEADER_BRANDED)) {
+    source = replaceExact(
+      source,
+      PERMISSION_MODE_HEADER_BRANDED,
+      PERMISSION_MODE_HEADER_UPSTREAM,
+      "permission mode header restoration",
+      appInitialPath,
+    );
+  } else if (!source.includes(PERMISSION_MODE_HEADER_UPSTREAM)) {
+    throw new Error(`${relPath(appInitialPath)}: permission mode header restoration was not recognized`);
+  }
+
   const brandedWarningDescription = `defaultMessage:\`${config.appName} will be able to run commands, use the internet, and create and edit files anywhere on this computer without your permission. This includes but is not limited to:\`/*${FULL_ACCESS_APP_NAME_MARKER}*/`;
   const brandedWarningPattern = new RegExp(
     `defaultMessage:\`[^\`]*\`/\\*${FULL_ACCESS_APP_NAME_MARKER}\\*/`,
@@ -1119,6 +1146,7 @@ async function main() {
       const rendererDetailMode = findRendererDetailMode(appInitial)?.currentMode ?? null;
       const rendererWindowsSandboxBanner = appInitial.includes("forgecode-hide-windows-sandbox-banner");
       const rendererPermissionModeSelection = appInitial.includes(PERMISSION_MODE_SELECTION_MARKER);
+      const rendererPermissionModeHeader = appInitial.includes(PERMISSION_MODE_HEADER_MARKER);
       const rendererFullAccessRiskDescription = appInitial.includes(FULL_ACCESS_RISK_DESCRIPTION_MARKER);
       const rendererFullAccessAppName = appInitial.includes(FULL_ACCESS_APP_NAME_MARKER);
       const locale = localeName
@@ -1145,6 +1173,7 @@ async function main() {
         && rendererDetailMode === config.productMode
         && (!config.ui.hideWindowsSandboxBanner || rendererWindowsSandboxBanner)
         && rendererPermissionModeSelection === config.ui.enablePermissionModeSelection
+        && rendererPermissionModeHeader === config.ui.hidePermissionModeHeader
         && rendererFullAccessRiskDescription === config.ui.hideFullAccessRiskDescription
         && rendererFullAccessAppName
         && index.includes(BLOCK_START)

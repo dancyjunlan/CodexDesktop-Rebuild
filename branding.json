@@ -27,6 +27,7 @@
   "ui": {
     "hideWindowsSandboxBanner": false,
     "enablePermissionModeSelection": true,
+    "hidePermissionModeHeader": true,
     "hideFullAccessRiskDescription": true,
     "hideApiKeyAuthMenuItem": true,
     "hideLogoutMenuItem": true,

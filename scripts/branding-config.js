@@ -88,6 +88,7 @@ function requireBranding() {
   for (const name of [
     "hideWindowsSandboxBanner",
     "enablePermissionModeSelection",
+    "hidePermissionModeHeader",
     "hideFullAccessRiskDescription",
     "hideApiKeyAuthMenuItem",
     "hideLogoutMenuItem",
