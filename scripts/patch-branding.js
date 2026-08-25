@@ -438,7 +438,9 @@ function patchOnboarding(platform) {
   let onboarding = fs.readFileSync(onboardingPath, "utf-8");
   onboarding = onboarding.replace(
     /((?:defaultMessage|description):`(?:\\.|[^`])*`)/g,
-    (value) => value.replaceAll("ChatGPT", config.appName),
+    (value) => value
+      .replaceAll("ChatGPT", config.appName)
+      .replaceAll("Codex", config.appName),
   );
   const upstream = "):On=t[179];let kn;return t[180]!==pt";
   const branded = "):On=t[179];globalThis.__forgecodeOnboardingSkipped??(globalThis.__forgecodeOnboardingSkipped=!0,queueMicrotask(On));let kn;return t[180]!==pt";
@@ -606,6 +608,9 @@ function patchLocaleBrandNames(platform) {
     const next = source.replace(
       /(:`(?:\\.|[^`])*`)/g,
       (value) => value.replaceAll("ChatGPT", config.appName),
+    ).replace(
+      /(\"electron\.onboarding\.welcomeV2\.[^\"]+\":`(?:\\.|[^`])*`)/g,
+      (value) => value.replaceAll("Codex", config.appName),
     );
     if (next !== source) {
       writeIfChanged(filePath, next);
