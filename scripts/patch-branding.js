@@ -44,6 +44,8 @@ const LEGACY_NATIVE_HELP_MENU_BUILD = LEGACY_NATIVE_HELP_MENU_FILTER + UPSTREAM_
 const STACKED_NATIVE_HELP_MENU_BUILD = LEGACY_NATIVE_HELP_MENU_FILTER + BRANDED_NATIVE_HELP_MENU_BUILD;
 const NATIVE_HELP_MENU_CLEANUP = "for(let e=Ut.items.length-1;e>=0;e--)Ut.items[e].role===`help`&&Ut.removeAt(e);";
 const NATIVE_LOGOUT_MENU_CLEANUP = "if(Gt){let e=Gt.items.findIndex(e=>e.label===se.label);if(e>=0){Gt.removeAt(e);if(e>0&&Gt.items[e-1].type===`separator`)Gt.removeAt(e-1)}}";
+const UPSTREAM_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem(se))";
+const BRANDED_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem({...se,visible:!1}))";
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -395,18 +397,26 @@ function patchMainProcess(platform) {
       throw new Error(`${relPath(mainPath)}: native Settings menu append was not recognized`);
     }
   }
-  const nativeMenuCleanup = [
-    config.ui.hideNativeHelpMenu ? NATIVE_HELP_MENU_CLEANUP : "",
-    config.ui.hideNativeLogoutMenuItem ? NATIVE_LOGOUT_MENU_CLEANUP : "",
-  ].join("");
-  if (nativeMenuCleanup && !main.includes(nativeMenuCleanup)) {
-    main = replaceExact(
-      main,
-      "l.Menu.setApplicationMenu(Ut)",
-      nativeMenuCleanup + "l.Menu.setApplicationMenu(Ut)",
-      "native menu cleanup",
-      mainPath,
-    );
+
+  // Migrate the previous runtime menu cleanup, which used an unavailable
+  // Electron Menu.removeAt API, before applying the template-level patches.
+  for (const legacyCleanup of [NATIVE_HELP_MENU_CLEANUP, NATIVE_LOGOUT_MENU_CLEANUP]) {
+    if (main.includes(legacyCleanup)) {
+      main = replaceExact(main, legacyCleanup, "", "legacy native menu cleanup", mainPath);
+    }
+  }
+  if (config.ui.hideNativeLogoutMenuItem) {
+    if (main.includes(UPSTREAM_NATIVE_LOGOUT_MENU_APPEND)) {
+      main = replaceExact(
+        main,
+        UPSTREAM_NATIVE_LOGOUT_MENU_APPEND,
+        BRANDED_NATIVE_LOGOUT_MENU_APPEND,
+        "native Logout menu visibility",
+        mainPath,
+      );
+    } else if (!main.includes(BRANDED_NATIVE_LOGOUT_MENU_APPEND)) {
+      throw new Error(`${relPath(mainPath)}: native Logout menu append was not recognized`);
+    }
   }
   writeIfChanged(mainPath, main);
 
@@ -946,12 +956,16 @@ async function main() {
           mainSource.includes(BRANDED_NATIVE_HELP_MENU_BUILD)
           && !mainSource.includes(LEGACY_NATIVE_HELP_MENU_BUILD)
           && !mainSource.includes(STACKED_NATIVE_HELP_MENU_BUILD)
-          && mainSource.includes(NATIVE_HELP_MENU_CLEANUP)
+          && !mainSource.includes(NATIVE_HELP_MENU_CLEANUP)
+          && !mainSource.includes(NATIVE_LOGOUT_MENU_CLEANUP)
         );
       const nativeSettingsVisibilityReady = !config.ui.hideNativeSettingsMenuItem
         || !mainSource.includes("Wt.append(new l.MenuItem(F))");
       const nativeLogoutVisibilityReady = !config.ui.hideNativeLogoutMenuItem
-        || mainSource.includes(NATIVE_LOGOUT_MENU_CLEANUP);
+        || (
+          mainSource.includes(BRANDED_NATIVE_LOGOUT_MENU_APPEND)
+          && !mainSource.includes(NATIVE_LOGOUT_MENU_CLEANUP)
+        );
       const sqlite = sqliteName ? fs.readFileSync(path.join(buildDir, sqliteName), "utf-8") : "";
       const onboarding = onboardingName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", onboardingName), "utf-8")
