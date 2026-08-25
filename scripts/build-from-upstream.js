@@ -16,13 +16,19 @@ const { execSync, execFileSync } = require("child_process");
 const os = require("os");
 const asar = require("@electron/asar");
 const { brandWindowsExecutable } = require("./windows-executable-branding");
+const {
+  PROJECT_ROOT,
+  branding,
+  iconPath,
+  windowsExecutableBaseName,
+} = require("./branding-config");
+const { syncBrandingMetadata } = require("./sync-branding-metadata");
 
-const PROJECT_ROOT = path.resolve(__dirname, "..");
-const branding = require(path.join(PROJECT_ROOT, "branding.json"));
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
 const OUT_DIR = path.join(PROJECT_ROOT, "out");
 const WINDOWS_LAUNCHER_SOURCE = path.join(PROJECT_ROOT, "resources", "aigeek-launcher.cs");
 const WINDOWS_CSC = path.join(process.env.WINDIR || "C:\\Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+const windowsBranding = branding.windows;
 
 const TARGET_TRIPLE_MAP = {
   "mac-arm64": "aarch64-apple-darwin",
@@ -161,29 +167,62 @@ function resolveCodexVendor(platform) {
 
 async function setWindowsExecutableIdentity(exePath, iconPath, originalFilename) {
   await brandWindowsExecutable(exePath, iconPath, {
-    ProductName: "AIGeek",
-    FileDescription: "AIGeek Desktop",
-    CompanyName: "AIGeek Studio",
+    ProductName: branding.appName,
+    FileDescription: `${branding.appName} Desktop`,
+    CompanyName: branding.author,
     OriginalFilename: originalFilename,
   });
 }
 
+function escapeCSharpString(value) {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+function renderWindowsLauncherSource() {
+  const source = fs.readFileSync(WINDOWS_LAUNCHER_SOURCE, "utf-8");
+  const values = {
+    "__BRANDING_WINDOWS_APP_USER_MODEL_ID__": windowsBranding.appUserModelId,
+    "__BRANDING_WINDOWS_HOST_EXECUTABLE_NAME__": windowsBranding.hostExecutableName,
+    "__BRANDING_WINDOWS_APP_DATA_DIRECTORY_NAME__": windowsBranding.runtimeUserDataDirectoryName,
+    "__BRANDING_APP_NAME__": branding.appName,
+  };
+
+  let rendered = source;
+  for (const [placeholder, value] of Object.entries(values)) {
+    if (!rendered.includes(placeholder)) {
+      throw new Error(`Windows launcher template is missing ${placeholder}`);
+    }
+    rendered = rendered.replaceAll(placeholder, escapeCSharpString(value));
+  }
+  return rendered;
+}
+
+function renderLicense() {
+  const template = fs.readFileSync(path.join(PROJECT_ROOT, "resources", "LICENSE"), "utf-8");
+  return template
+    .replaceAll("__BRANDING_APP_NAME__", branding.appName)
+    .replaceAll("__BRANDING_COPYRIGHT__", branding.copyright);
+}
+
 async function buildWindowsLauncher(destination, iconPath) {
   if (!fs.existsSync(WINDOWS_CSC)) {
-    throw new Error("Windows C# compiler was not found; cannot build the AIGeek launcher");
+    throw new Error("Windows C# compiler was not found; cannot build the branded launcher");
   }
-  const launcherSource = fs.readFileSync(WINDOWS_LAUNCHER_SOURCE, "utf-8");
-  if (!launcherSource.includes(`AppUserModelId = "${branding.windowsAppUserModelId}"`)) {
-    throw new Error("Windows launcher AppUserModelID does not match branding.json");
+  const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "branding-launcher-"));
+  const temporarySource = path.join(temporaryDirectory, "launcher.cs");
+  try {
+    fs.writeFileSync(temporarySource, renderWindowsLauncherSource(), "utf-8");
+    execFileSync(WINDOWS_CSC, [
+      "/nologo",
+      "/target:winexe",
+      "/optimize+",
+      "/out:" + destination,
+      temporarySource,
+    ], { stdio: "pipe" });
+  } finally {
+    fs.rmSync(temporaryDirectory, { recursive: true, force: true });
   }
-  execFileSync(WINDOWS_CSC, [
-    "/nologo",
-    "/target:winexe",
-    "/optimize+",
-    "/out:" + destination,
-    WINDOWS_LAUNCHER_SOURCE,
-  ], { stdio: "pipe" });
-  await setWindowsExecutableIdentity(destination, iconPath, "AIGeek.exe");
+  await setWindowsExecutableIdentity(destination, iconPath, windowsBranding.executableName);
 }
 
 function patchWindowsRuntimeIdentity(resourcesDir) {
@@ -193,7 +232,7 @@ function patchWindowsRuntimeIdentity(resourcesDir) {
   }
 
   const upstream = "UserDataDirectoryName=Codex";
-  const branded = "UserDataDirectoryName=AIGeek";
+  const branded = `UserDataDirectoryName=${windowsBranding.runtimeUserDataDirectoryName}`;
   const source = fs.readFileSync(iniPath, "utf-8");
   if (source.includes(upstream)) {
     fs.writeFileSync(iniPath, source.replace(upstream, branded), "utf-8");
@@ -241,7 +280,7 @@ function buildMac(platform) {
   // 2. Copy .app to output (ditto preserves symlinks + resource forks)
   const outAppDir = path.join(OUT_DIR, platform);
   clearDir(outAppDir);
-  const outApp = path.join(outAppDir, "Codex.app");
+  const outApp = path.join(outAppDir, `${branding.appName}.app`);
   console.log("   [copy] Codex.app -> out/");
   execSync(`ditto "${appPath}" "${outApp}"`);
 
@@ -277,10 +316,10 @@ function buildMac(platform) {
 
   // 8. Create DMG
   const version = getVersion(asarDir);
-  const dmgName = `Codex-${platform}-${version}.dmg`;
+  const dmgName = `${branding.appName}-${platform}-${version}.dmg`;
   const dmgPath = path.join(OUT_DIR, dmgName);
   console.log(`   [dmg] ${dmgName}`);
-  execSync(`hdiutil create -volname Codex -srcfolder "${outAppDir}" -ov -format UDZO "${dmgPath}"`, { stdio: "pipe" });
+  execSync(`hdiutil create -volname "${branding.appName}" -srcfolder "${outAppDir}" -ov -format UDZO "${dmgPath}"`, { stdio: "pipe" });
   const sizeMB = (fs.statSync(dmgPath).size / 1048576).toFixed(1);
   console.log(`   [ok] ${dmgPath} (${sizeMB} MB)`);
 }
@@ -315,7 +354,7 @@ async function buildWin(platform) {
   // concurrent write to the same destination.
   const outAppDir = path.join(OUT_DIR, "win");
   clearDir(outAppDir);
-  const outApp = path.join(outAppDir, "AIGeek-win-x64");
+  const outApp = path.join(outAppDir, `${windowsExecutableBaseName()}-win-x64`);
   const resourcesDir = path.join(outApp, "resources");
   const asarPath = path.join(resourcesDir, "app.asar");
   const copyConcurrency = getCopyConcurrency();
@@ -351,17 +390,17 @@ async function buildWin(platform) {
   ]);
   console.log(`   [copy] completed ${copied} files`);
 
-  const iconPath = path.resolve(PROJECT_ROOT, branding.icons.windows);
+  const windowsIconPath = iconPath("windows");
   const upstreamRuntimeExe = path.join(outApp, "ChatGPT.exe");
-  const brandedRuntimeExe = path.join(outApp, "AIGeekHost.exe");
+  const brandedRuntimeExe = path.join(outApp, windowsBranding.hostExecutableName);
   patchWindowsRuntimeIdentity(resourcesDir);
-  fs.copyFileSync(iconPath, path.join(resourcesDir, "aigeek.ico"));
+  fs.copyFileSync(windowsIconPath, path.join(resourcesDir, windowsBranding.runtimeIconFileName));
   for (const trayIcon of [
     "chatgpt-tray-light.ico",
     "chatgpt-tray-dark.ico",
     "icon-chatgpt.ico",
   ]) {
-    fs.copyFileSync(iconPath, path.join(resourcesDir, trayIcon));
+    fs.copyFileSync(windowsIconPath, path.join(resourcesDir, trayIcon));
   }
 
   // This MSIX runtime does not embed an app.asar header hash in its EXEs.
@@ -372,8 +411,8 @@ async function buildWin(platform) {
   // independent Chromium data directory. The Owl host cannot do that itself:
   // it only accepts a directory name below Roaming\\Codex\\web.
   fs.copyFileSync(upstreamRuntimeExe, brandedRuntimeExe);
-  await setWindowsExecutableIdentity(brandedRuntimeExe, iconPath, "AIGeekHost.exe");
-  await buildWindowsLauncher(path.join(outApp, "AIGeek.exe"), iconPath);
+  await setWindowsExecutableIdentity(brandedRuntimeExe, windowsIconPath, windowsBranding.hostExecutableName);
+  await buildWindowsLauncher(path.join(outApp, windowsBranding.executableName), windowsIconPath);
   fs.rmSync(upstreamRuntimeExe, { force: true });
 
   // The extracted upstream runtime is too large for a responsive self-
@@ -381,28 +420,28 @@ async function buildWin(platform) {
   // so the user can run the branded executable directly with no install-time
   // compression or secondary launcher involved.
   fs.writeFileSync(
-    path.join(outApp, "Start-AIGeek.cmd"),
-    "@echo off\r\nstart \"\" \"%~dp0AIGeek.exe\"\r\n",
+    path.join(outApp, `Start-${windowsExecutableBaseName()}.cmd`),
+    `@echo off\r\nstart "" "%~dp0${windowsBranding.executableName}"\r\n`,
     "ascii",
   );
-  fs.copyFileSync(path.join(PROJECT_ROOT, "resources", "LICENSE"), path.join(outApp, "LICENSE"));
+  fs.writeFileSync(path.join(outApp, "LICENSE"), renderLicense(), "utf-8");
 
   // Replace codex CLI
   replaceCodex(platform, resourcesDir, "codex.exe");
 
   // The MSIX root Codex.exe is only a launcher that activates an existing
   // installed Codex session. It is not this portable app's Electron host and
-  // makes users accidentally reopen the official app instead of AIGeek.
+  // makes users accidentally reopen the official app instead of the branded app.
   fs.rmSync(path.join(outApp, "Codex.exe"), { force: true });
 
-  const oldInstallerPath = path.join(OUT_DIR, "AIGeek-Setup.exe");
+  const oldInstallerPath = path.join(OUT_DIR, windowsBranding.installerFileName);
   fs.rmSync(oldInstallerPath, { force: true });
   if (fs.existsSync(path.join(outApp, "Codex.exe"))) {
     throw new Error("Windows output retained the upstream Codex launcher");
   }
   const runtimeIni = fs.readFileSync(path.join(resourcesDir, "owl-app.ini"), "utf-8");
-  if (!runtimeIni.includes("UserDataDirectoryName=AIGeek")) {
-    throw new Error("Windows output did not retain the AIGeek Owl runtime identity");
+  if (!runtimeIni.includes(`UserDataDirectoryName=${windowsBranding.runtimeUserDataDirectoryName}`)) {
+    throw new Error("Windows output did not retain the configured Owl runtime identity");
   }
   console.log(`   [ok] portable app: ${outApp}`);
 }
@@ -474,6 +513,7 @@ async function main() {
     process.exit(1);
   }
 
+  syncBrandingMetadata();
   console.log(`\n== Build from upstream: ${platform} ==\n`);
   fs.mkdirSync(OUT_DIR, { recursive: true });
   applyPatches(platform);

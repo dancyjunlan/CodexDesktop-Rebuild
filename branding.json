@@ -14,9 +14,24 @@
   "packageName": "idp-desktop",
   "author": "IDP Studio",
   "description": "A focused desktop workspace for coding with AI.",
+  "genericName": "AI Coding Assistant",
+  "theme": {
+    "mint": "#6ee7c1",
+    "coral": "#ff7a59",
+    "ink": "#17231f"
+  },
   "devAppName": "IDP (Dev)",
-  "windowsAppUserModelId": "studio.idp.desktop.v2",
-  "windowsTrayGuid": "0f6c3f6f-6752-4cd3-a80b-641391a9fa70",
+  "homeDirectoryName": ".idp",
+  "windows": {
+    "appUserModelId": "studio.idp.desktop.v2",
+    "trayGuid": "0f6c3f6f-6752-4cd3-a80b-641391a9fa70",
+    "executableName": "IDP.exe",
+    "hostExecutableName": "IDPHost.exe",
+    "runtimeIconFileName": "idp.ico",
+    "runtimeUserDataDirectoryName": "IDP",
+    "installerFileName": "IDP-Setup.exe",
+    "legacyProductName": "AIGeek"
+  },
   "databaseFileName": "idp.db",
   "devDatabaseFileName": "idp-dev.db",
   "copyright": "Copyright (c) IDP Studio"

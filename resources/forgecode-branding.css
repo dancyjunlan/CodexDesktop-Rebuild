@@ -1,11 +1,11 @@
 :root {
-  --forgecode-mint: #6ee7c1;
-  --forgecode-coral: #ff7a59;
-  --forgecode-ink: #17231f;
+  --forgecode-mint: __BRANDING_THEME_MINT__;
+  --forgecode-coral: __BRANDING_THEME_CORAL__;
+  --forgecode-ink: __BRANDING_THEME_INK__;
 }
 
 .startup-loader__logo {
-  background: url("./aigeek-mark.png") center / contain no-repeat !important;
+  background: url("./__BRANDING_WEBVIEW_ICON__") center / contain no-repeat !important;
   animation: none !important;
   opacity: 1 !important;
 }
@@ -23,7 +23,7 @@
   flex: 0 0 18px;
   margin-right: 8px;
   vertical-align: -4px;
-  background: url("./aigeek-mark.png") center / contain no-repeat;
+  background: url("./__BRANDING_WEBVIEW_ICON__") center / contain no-repeat;
 }
 
 [data-forgecode-hide-workspace-name] {

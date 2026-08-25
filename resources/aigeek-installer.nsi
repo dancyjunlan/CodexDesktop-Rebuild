@@ -5,20 +5,33 @@ SetDatablockOptimize on
 
 !include "MUI2.nsh"
 
-!define PRODUCT_NAME "AIGeek"
-!define PRODUCT_PUBLISHER "AIGeek Studio"
+!ifndef PRODUCT_NAME
+!error "PRODUCT_NAME must be supplied by the branding build configuration"
+!endif
+!ifndef PRODUCT_PUBLISHER
+!error "PRODUCT_PUBLISHER must be supplied by the branding build configuration"
+!endif
 !ifndef PRODUCT_VERSION
 !define PRODUCT_VERSION "0.0.0"
 !endif
 !ifndef APP_USER_MODEL_ID
-!define APP_USER_MODEL_ID "studio.aigeek.desktop.v2"
+!error "APP_USER_MODEL_ID must be supplied by the branding build configuration"
+!endif
+!ifndef HOME_DIRECTORY_NAME
+!error "HOME_DIRECTORY_NAME must be supplied by the branding build configuration"
+!endif
+!ifndef EXECUTABLE_NAME
+!error "EXECUTABLE_NAME must be supplied by the branding build configuration"
+!endif
+!ifndef LEGACY_PRODUCT_NAME
+!define LEGACY_PRODUCT_NAME ""
 !endif
 
 Name "${PRODUCT_NAME}"
 OutFile "${OUTFILE}"
-InstallDir "$LOCALAPPDATA\AIGeek"
-InstallDirRegKey HKCU "Software\AIGeek" "InstallDir"
-BrandingText "AIGeek Studio"
+InstallDir "$LOCALAPPDATA\${PRODUCT_NAME}"
+InstallDirRegKey HKCU "Software\${PRODUCT_NAME}" "InstallDir"
+BrandingText "${PRODUCT_PUBLISHER}"
 Icon "${ICON}"
 
 !insertmacro MUI_PAGE_WELCOME
@@ -39,8 +52,8 @@ legacy_shortcuts:
 done:
   ; Remove shortcuts from the earlier studio-based package. They point at
   ; the old gray ChatGPT host and keep confusing Explorer's app identity.
-  Delete "$SMPROGRAMS\AIGeek.lnk"
-  Delete "$SMPROGRAMS\AIGeek Studio\AIGeek.lnk"
+  Delete "$SMPROGRAMS\${LEGACY_PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${LEGACY_PRODUCT_NAME} Studio\${LEGACY_PRODUCT_NAME}.lnk"
 FunctionEnd
 
 Section "Install"
@@ -62,52 +75,51 @@ Section "Install"
   nsExec::Exec '"$PLUGINSDIR\7z.exe" x "$PLUGINSDIR\payload.7z" "-o$INSTDIR" -y'
   Pop $0
   StrCmp $0 0 payload_extracted
-  MessageBox MB_ICONSTOP "AIGeek files could not be unpacked (error $0)."
+  MessageBox MB_ICONSTOP "${PRODUCT_NAME} files could not be unpacked (error $0)."
   Abort
 payload_extracted:
   ; Seed the independent CLI home only once. Existing credentials and settings
   ; belong to the user and must survive installation and upgrades unchanged.
-  CreateDirectory "$PROFILE\.aigeek"
-  IfFileExists "$PROFILE\.aigeek\auth.json" auth_exists
-  CopyFiles /SILENT "$PLUGINSDIR\default-auth.json" "$PROFILE\.aigeek\auth.json"
+  CreateDirectory "$PROFILE\${HOME_DIRECTORY_NAME}"
+  IfFileExists "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json" auth_exists
+  CopyFiles /SILENT "$PLUGINSDIR\default-auth.json" "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json"
 auth_exists:
-  IfFileExists "$PROFILE\.aigeek\config.toml" config_exists
-  CopyFiles /SILENT "$PLUGINSDIR\default-config.toml" "$PROFILE\.aigeek\config.toml"
+  IfFileExists "$PROFILE\${HOME_DIRECTORY_NAME}\config.toml" config_exists
+  CopyFiles /SILENT "$PLUGINSDIR\default-config.toml" "$PROFILE\${HOME_DIRECTORY_NAME}\config.toml"
 config_exists:
-  WriteRegStr HKCU "Software\AIGeek" "InstallDir" "$INSTDIR"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "DisplayName" "AIGeek"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "Publisher" "${PRODUCT_PUBLISHER}"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "DisplayVersion" "${PRODUCT_VERSION}"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "UninstallString" "$INSTDIR\Uninstall.exe"
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "NoModify" 1
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "NoRepair" 1
+  WriteRegStr HKCU "Software\${PRODUCT_NAME}" "InstallDir" "$INSTDIR"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayName" "${PRODUCT_NAME}"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "Publisher" "${PRODUCT_PUBLISHER}"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayVersion" "${PRODUCT_VERSION}"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "NoModify" 1
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "NoRepair" 1
   WriteRegStr HKCU "Software\Classes\AppUserModelId\${APP_USER_MODEL_ID}" "DisplayName" "${PRODUCT_NAME}"
-  WriteRegStr HKCU "Software\Classes\AppUserModelId\${APP_USER_MODEL_ID}" "IconUri" "$INSTDIR\AIGeek.exe"
-  CreateDirectory "$SMPROGRAMS\AIGeek"
+  WriteRegStr HKCU "Software\Classes\AppUserModelId\${APP_USER_MODEL_ID}" "IconUri" "$INSTDIR\${EXECUTABLE_NAME}"
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
   ; Create shortcuts through the branded launcher so the shell link carries
-  ; System.AppUserModel.ID=studio.aigeek.desktop.v2. Without this property,
-  ; Windows treats the pinned shortcut and the running host as separate apps.
-  nsExec::ExecToLog '"$INSTDIR\AIGeek.exe" --create-shortcuts "$SMPROGRAMS\AIGeek\AIGeek.lnk" "$INSTDIR\AIGeek.exe"'
+  ; its AppUserModelID and stays associated with the running host.
+  nsExec::ExecToLog '"$INSTDIR\${EXECUTABLE_NAME}" --create-shortcuts "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${EXECUTABLE_NAME}"'
   Pop $0
   StrCmp $0 0 shortcuts_created
-  MessageBox MB_ICONSTOP "AIGeek shortcuts could not be created (error $0)."
+  MessageBox MB_ICONSTOP "${PRODUCT_NAME} shortcuts could not be created (error $0)."
   Abort
 shortcuts_created:
-  nsExec::ExecToLog '"$INSTDIR\AIGeek.exe" --create-shortcuts "$DESKTOP\AIGeek.lnk" "$INSTDIR\AIGeek.exe"'
+  nsExec::ExecToLog '"$INSTDIR\${EXECUTABLE_NAME}" --create-shortcuts "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${EXECUTABLE_NAME}"'
   Pop $0
   StrCmp $0 0 desktop_shortcut_created
-  MessageBox MB_ICONSTOP "AIGeek desktop shortcut could not be created (error $0)."
+  MessageBox MB_ICONSTOP "${PRODUCT_NAME} desktop shortcut could not be created (error $0)."
   Abort
 desktop_shortcut_created:
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd
 
 Section "Uninstall"
-  Delete "$DESKTOP\AIGeek.lnk"
-  Delete "$SMPROGRAMS\AIGeek\AIGeek.lnk"
-  RMDir "$SMPROGRAMS\AIGeek"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek"
+  Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
+  RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
   DeleteRegKey HKCU "Software\Classes\AppUserModelId\${APP_USER_MODEL_ID}"
-  DeleteRegKey HKCU "Software\AIGeek"
+  DeleteRegKey HKCU "Software\${PRODUCT_NAME}"
   RMDir /r "$INSTDIR"
 SectionEnd

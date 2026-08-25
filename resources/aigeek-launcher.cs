@@ -8,7 +8,7 @@ using System.Text;
 
 internal static class Program
 {
-    private const string AppUserModelId = "studio.aigeek.desktop.v2";
+    private const string AppUserModelId = "__BRANDING_WINDOWS_APP_USER_MODEL_ID__";
 
     private static readonly Guid ShellLinkClassId = new Guid("00021401-0000-0000-C000-000000000046");
     private static readonly PROPERTYKEY AppUserModelIdKey = new PROPERTYKEY(
@@ -104,12 +104,12 @@ internal static class Program
         }
 
         var directory = AppDomain.CurrentDomain.BaseDirectory;
-        var host = Path.Combine(directory, "AIGeekHost.exe");
+        var host = Path.Combine(directory, "__BRANDING_WINDOWS_HOST_EXECUTABLE_NAME__");
         if (!File.Exists(host)) return 1;
 
         var userData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "AIGeek");
+            "__BRANDING_WINDOWS_APP_DATA_DIRECTORY_NAME__");
         Directory.CreateDirectory(userData);
 
         var forwarded = string.Join(" ", args.Select(Quote));
@@ -130,7 +130,7 @@ internal static class Program
         {
             shellLink.SetPath(targetPath);
             shellLink.SetWorkingDirectory(Path.GetDirectoryName(targetPath));
-            shellLink.SetDescription("AIGeek");
+            shellLink.SetDescription("__BRANDING_APP_NAME__");
             shellLink.SetIconLocation(targetPath, 0);
 
             var propertyStore = (IPropertyStore)shellLink;

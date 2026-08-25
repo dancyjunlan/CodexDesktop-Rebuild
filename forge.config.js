@@ -1,21 +1,13 @@
 const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 const path = require("path");
 const fs = require("fs");
-const branding = require("./branding.json");
-
-function iconPath(name) {
-  const configuredPath = branding.icons?.[name];
-  if (typeof configuredPath !== "string" || configuredPath.length === 0) {
-    throw new Error(`branding.json: icons.${name} must be a non-empty path`);
-  }
-  return path.resolve(__dirname, configuredPath);
-}
+const { branding, iconPath, windowsExecutableBaseName } = require("./scripts/branding-config");
 
 module.exports = {
   packagerConfig: {
-    name: "AIGeek",
-    executableName: "AIGeek",
-    appBundleId: "studio.aigeek.desktop",
+    name: branding.packageName,
+    executableName: windowsExecutableBaseName(),
+    appBundleId: branding.windows.appUserModelId,
     icon: iconPath("packager"),
     // Build mode is set by prepare-src.js via src/.build-mode marker file.
     // "upstream-asar": mac/win — we provide pre-built app.asar, forge skips ASAR packing.
@@ -58,8 +50,8 @@ module.exports = {
       teamId: process.env.APPLE_TEAM_ID,
     },
     win32metadata: {
-      CompanyName: "AIGeek Studio",
-      ProductName: "AIGeek",
+      CompanyName: branding.author,
+      ProductName: branding.appName,
     },
   },
   rebuildConfig: {},
@@ -69,20 +61,20 @@ module.exports = {
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "AIGeek",
-        authors: "AIGeek Studio",
-        description: "AIGeek desktop app",
+        name: branding.packageName,
+        authors: branding.author,
+        description: branding.description,
         setupIcon: iconPath("windows"),
       },
     },
     { name: "@electron-forge/maker-zip", platforms: ["win32"] },
     {
       name: "@electron-forge/maker-deb",
-      config: { options: { name: "aigeek", productName: "AIGeek", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "AIGeek", maintainer: "AIGeek Studio", icon: iconPath("linux") } },
+      config: { options: { name: branding.packageName, productName: branding.appName, genericName: branding.genericName, categories: ["Development", "Utility"], bin: windowsExecutableBaseName(), maintainer: branding.author, icon: iconPath("linux") } },
     },
     {
       name: "@electron-forge/maker-rpm",
-      config: { options: { name: "aigeek", productName: "AIGeek", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "AIGeek", license: "Apache-2.0", icon: iconPath("linux") } },
+      config: { options: { name: branding.packageName, productName: branding.appName, genericName: branding.genericName, categories: ["Development", "Utility"], bin: windowsExecutableBaseName(), license: "Apache-2.0", icon: iconPath("linux") } },
     },
     { name: "@electron-forge/maker-zip", platforms: ["linux"] },
   ],

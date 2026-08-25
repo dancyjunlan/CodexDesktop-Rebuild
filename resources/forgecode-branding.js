@@ -1,6 +1,8 @@
 (() => {
   const appName = "__FORGECODE_NAME__";
   const sidebarName = "__FORGECODE_SIDEBAR_NAME__";
+  const webviewIcon = "__BRANDING_WEBVIEW_ICON__";
+  const webviewAnimation = "__BRANDING_WEBVIEW_ANIMATION__";
   const exactNames = new Set(["Codex", "OpenAI Codex", "Codex (Dev)"]);
   const hiddenWorkspaceNames = new Set(["ChatGPT Work"]);
   // React may recreate the selector after its label has already been branded.
@@ -44,8 +46,8 @@
     mark.className = "aigeek-home-mark";
     mark.setAttribute("aria-label", appName);
     mark.innerHTML = [
-      '<img class="aigeek-home-mark-static" src="./aigeek-mark.png" alt="" />',
-      '<img class="aigeek-home-mark-shatter" src="./aigeek-logo-shatter.gif" alt="" />',
+      `<img class="aigeek-home-mark-static" src="./${webviewIcon}" alt="" />`,
+      `<img class="aigeek-home-mark-shatter" src="./${webviewAnimation}" alt="" />`,
     ].join("");
     defaultMark.after(mark);
   }

@@ -2,12 +2,18 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const {
+  PROJECT_ROOT,
+  branding,
+  iconPath,
+  windowsExecutableBaseName,
+} = require("./branding-config");
 
-const root = path.resolve(__dirname, "..");
-const branding = require(path.join(root, "branding.json"));
-const appDirectory = path.join(root, "out", "win", "AIGeek-win-x64");
+const root = PROJECT_ROOT;
+const windowsBranding = branding.windows;
+const appDirectory = path.join(root, "out", "win", `${windowsExecutableBaseName()}-win-x64`);
 const outputDirectory = path.join(root, "out", "installer", "win-x64");
-const iconPath = path.resolve(root, branding.icons.windows);
+const windowsIconPath = iconPath("windows");
 const installerScript = path.join(root, "resources", "aigeek-installer.nsi");
 const defaultAuthPath = path.join(root, "auth.json");
 const defaultConfigPath = path.join(root, "config.toml");
@@ -23,7 +29,7 @@ const nsis = [
   path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "NSIS", "Bin", "makensis.exe"),
 ].find((candidate) => fs.existsSync(candidate));
 
-if (!fs.existsSync(path.join(appDirectory, "AIGeek.exe"))) {
+if (!fs.existsSync(path.join(appDirectory, windowsBranding.executableName))) {
   throw new Error("Windows app output is missing. Run npm run build:win-x64 first.");
 }
 if (!nsis) {
@@ -41,10 +47,11 @@ if (!/^(on|off|\d+)$/i.test(compressionThreads)) {
 }
 
 fs.mkdirSync(outputDirectory, { recursive: true });
-const installerPath = path.join(outputDirectory, "AIGeek-Setup.exe");
-const stagingPath = path.join(outputDirectory, "AIGeek-Setup.building.exe");
-const payloadPath = path.join(outputDirectory, "AIGeek-payload.7z");
-const payloadStagingPath = path.join(outputDirectory, "AIGeek-payload.building.7z");
+const installerFile = path.parse(windowsBranding.installerFileName);
+const installerPath = path.join(outputDirectory, windowsBranding.installerFileName);
+const stagingPath = path.join(outputDirectory, `${installerFile.name}.building${installerFile.ext}`);
+const payloadPath = path.join(outputDirectory, `${installerFile.name}-payload.7z`);
+const payloadStagingPath = path.join(outputDirectory, `${installerFile.name}-payload.building.7z`);
 fs.rmSync(stagingPath, { force: true });
 fs.rmSync(payloadStagingPath, { force: true });
 
@@ -83,9 +90,14 @@ execFileSync(nsis, [
   `/DDEFAULT_AUTH=${defaultAuthPath}`,
   `/DDEFAULT_CONFIG=${defaultConfigPath}`,
   `/DPRODUCT_VERSION=${packageVersion}`,
-  `/DAPP_USER_MODEL_ID=${branding.windowsAppUserModelId}`,
+  `/DPRODUCT_NAME=${branding.appName}`,
+  `/DPRODUCT_PUBLISHER=${branding.author}`,
+  `/DAPP_USER_MODEL_ID=${windowsBranding.appUserModelId}`,
+  `/DHOME_DIRECTORY_NAME=${branding.homeDirectoryName}`,
+  `/DEXECUTABLE_NAME=${windowsBranding.executableName}`,
+  `/DLEGACY_PRODUCT_NAME=${windowsBranding.legacyProductName || ""}`,
   `/DOUTFILE=${stagingPath}`,
-  `/DICON=${iconPath}`,
+  `/DICON=${windowsIconPath}`,
   installerScript,
 ], { stdio: "inherit" });
 if (!fs.existsSync(stagingPath) || fs.statSync(stagingPath).size === 0) {
@@ -100,7 +112,7 @@ try {
   // completed build available under a versioned name instead of failing after
   // all compression work has already finished.
   if (!fs.existsSync(stagingPath)) throw error;
-  completedInstallerPath = path.join(outputDirectory, `AIGeek-Setup-${packageVersion}.exe`);
+  completedInstallerPath = path.join(outputDirectory, `${installerFile.name}-${packageVersion}${installerFile.ext}`);
   fs.rmSync(completedInstallerPath, { force: true });
   fs.renameSync(stagingPath, completedInstallerPath);
   console.warn(`[installer] ${path.basename(installerPath)} is in use; created ${path.basename(completedInstallerPath)} instead.`);

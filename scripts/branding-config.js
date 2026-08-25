@@ -1,0 +1,70 @@
+const fs = require("fs");
+const path = require("path");
+
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+const brandingPath = path.join(PROJECT_ROOT, "branding.json");
+const branding = JSON.parse(fs.readFileSync(brandingPath, "utf-8"));
+
+function requireString(value, name) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`branding.json: ${name} must be a non-empty string`);
+  }
+  return value;
+}
+
+function requireBranding() {
+  for (const name of [
+    "appName",
+    "sidebarName",
+    "homeGreeting",
+    "packageName",
+    "author",
+    "description",
+    "genericName",
+    "devAppName",
+    "homeDirectoryName",
+    "databaseFileName",
+    "devDatabaseFileName",
+    "copyright",
+  ]) {
+    requireString(branding[name], name);
+  }
+  if (!branding.homeDirectoryName.startsWith(".")) {
+    throw new Error("branding.json: homeDirectoryName must start with a dot");
+  }
+
+  for (const name of [
+    "appUserModelId",
+    "trayGuid",
+    "executableName",
+    "hostExecutableName",
+    "runtimeIconFileName",
+    "runtimeUserDataDirectoryName",
+    "installerFileName",
+  ]) {
+    requireString(branding.windows?.[name], `windows.${name}`);
+  }
+
+  for (const name of ["webview", "webviewSmall", "webviewAnimation", "windows", "macos", "linux", "packager"]) {
+    requireString(branding.icons?.[name], `icons.${name}`);
+  }
+  for (const name of ["mint", "coral", "ink"]) {
+    requireString(branding.theme?.[name], `theme.${name}`);
+  }
+  return branding;
+}
+
+function iconPath(name) {
+  return path.resolve(PROJECT_ROOT, requireString(branding.icons?.[name], `icons.${name}`));
+}
+
+function windowsExecutableBaseName() {
+  return path.parse(branding.windows.executableName).name;
+}
+
+module.exports = {
+  PROJECT_ROOT,
+  branding: requireBranding(),
+  iconPath,
+  windowsExecutableBaseName,
+};

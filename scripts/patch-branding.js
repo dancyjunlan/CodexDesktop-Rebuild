@@ -12,38 +12,25 @@ const {
   brandWindowsExecutable,
   windowsExecutableHasPrimaryIcon,
 } = require("./windows-executable-branding");
-
-const config = JSON.parse(
-  fs.readFileSync(path.join(PROJECT_ROOT, "branding.json"), "utf-8"),
-);
+const { branding: config, iconPath } = require("./branding-config");
 const RESOURCE_DIR = path.join(PROJECT_ROOT, "resources");
-const MARK_SOURCE = resolveConfiguredIcon("webview");
-const SHATTER_SOURCE = resolveConfiguredIcon("webviewAnimation");
-const WINDOWS_ICON_SOURCE = resolveConfiguredIcon("windows");
+const windowsBranding = config.windows;
+const MARK_SOURCE = iconPath("webview");
+const SHATTER_SOURCE = iconPath("webviewAnimation");
+const WINDOWS_ICON_SOURCE = iconPath("windows");
+const WEBVIEW_ICON_FILE_NAME = path.basename(config.icons.webview);
+const WEBVIEW_ANIMATION_FILE_NAME = path.basename(config.icons.webviewAnimation);
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
 const WINDOWS_RUNTIME_INI = path.join(SRC_DIR, "win", "owl-app.ini");
 // Owl builds the Chromium path below Roaming\\Codex\\web. Resolve back to
 // Roaming before appending the branded directory so it never shares Codex's
 // app-data root.
-const WINDOWS_RUNTIME_USER_DATA_NAME = "AIGeek";
+const WINDOWS_RUNTIME_USER_DATA_NAME = windowsBranding.runtimeUserDataDirectoryName;
 const PREVIOUS_DATABASE_FILE_NAME = "forgecode.db";
 const PREVIOUS_DEV_DATABASE_FILE_NAME = "forgecode-dev.db";
 const BLOCK_START = "<!-- FORGECODE_BRANDING_START -->";
 const BLOCK_END = "<!-- FORGECODE_BRANDING_END -->";
-
-function resolveConfiguredIcon(name) {
-  const configuredPath = config.icons?.[name];
-  if (typeof configuredPath !== "string" || configuredPath.length === 0) {
-    throw new Error(`branding.json: icons.${name} must be a non-empty path`);
-  }
-
-  const iconPath = path.resolve(PROJECT_ROOT, configuredPath);
-  if (!fs.existsSync(iconPath)) {
-    throw new Error(`branding.json: icons.${name} does not exist: ${configuredPath}`);
-  }
-  return iconPath;
-}
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -68,7 +55,7 @@ function patchPackage(platform) {
   packageJson.description = config.description;
   // This is an internal runtime selector, not user-facing product text. Keep
   // the upstream value so the extracted Electron application follows its
-  // supported startup path; AIGeek's visible name and Windows identity are
+  // supported startup path; the visible product name and Windows identity are
   // patched independently below.
   packageJson.codexAppBrand = "chatgpt";
   delete packageJson.codexWindowsPackageIdentity;
@@ -97,14 +84,22 @@ function patchWebview(platform) {
     : index.replace("</head>", `${brandingBlock}\n  </head>`);
   writeIfChanged(indexPath, index);
 
-  fs.copyFileSync(MARK_SOURCE, path.join(webviewDir, "aigeek-mark.png"));
-  fs.copyFileSync(SHATTER_SOURCE, path.join(webviewDir, "aigeek-logo-shatter.gif"));
-  fs.copyFileSync(STYLE_SOURCE, path.join(webviewDir, "forgecode-branding.css"));
+  fs.copyFileSync(MARK_SOURCE, path.join(webviewDir, WEBVIEW_ICON_FILE_NAME));
+  fs.copyFileSync(SHATTER_SOURCE, path.join(webviewDir, WEBVIEW_ANIMATION_FILE_NAME));
+  const style = fs
+    .readFileSync(STYLE_SOURCE, "utf-8")
+    .replaceAll("__BRANDING_WEBVIEW_ICON__", WEBVIEW_ICON_FILE_NAME)
+    .replaceAll("__BRANDING_THEME_MINT__", config.theme.mint)
+    .replaceAll("__BRANDING_THEME_CORAL__", config.theme.coral)
+    .replaceAll("__BRANDING_THEME_INK__", config.theme.ink);
+  writeIfChanged(path.join(webviewDir, "forgecode-branding.css"), style);
   const script = fs
     .readFileSync(SCRIPT_SOURCE, "utf-8")
     .replace('"__FORGECODE_NAME__"', JSON.stringify(config.appName))
     .replace('"__FORGECODE_SIDEBAR_NAME__"', JSON.stringify(config.sidebarName))
-    .replace('"__FORGECODE_HOME_GREETING__"', JSON.stringify(config.homeGreeting));
+    .replace('"__FORGECODE_HOME_GREETING__"', JSON.stringify(config.homeGreeting))
+    .replace('"__BRANDING_WEBVIEW_ICON__"', JSON.stringify(WEBVIEW_ICON_FILE_NAME))
+    .replace('"__BRANDING_WEBVIEW_ANIMATION__"', JSON.stringify(WEBVIEW_ANIMATION_FILE_NAME));
   writeIfChanged(path.join(webviewDir, "forgecode-branding.js"), script);
 
   return relPath(indexPath);
@@ -153,11 +148,11 @@ function patchMainProcess(platform) {
   const appNameForResolvedFlavor = "Z===`dev`?`" + config.devAppName + "`:`" + config.appName + "`";
   const upstreamAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(i.i(Z))";
   const brandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`"
-    + config.windowsAppUserModelId + ".dev`:`" + config.windowsAppUserModelId + "`)";
+    + windowsBranding.appUserModelId + ".dev`:`" + windowsBranding.appUserModelId + "`)";
   const upstreamWindowsTrayGuid = "case n.js.Prod:return`e5768d8b-6936-4f45-b1ad-4c5fb414cb35`";
-  const brandedWindowsTrayGuid = "case n.js.Prod:return`" + config.windowsTrayGuid + "`";
+  const brandedWindowsTrayGuid = "case n.js.Prod:return`" + windowsBranding.trayGuid + "`";
   const brandedAppDataPath = "a.app.setPath(`appData`,o.join(a.app.getPath(`appData`),`..`,`" + config.appName + "`))";
-  const brandedCodeHome = `.${config.databaseFileName.replace(/\.db$/, "")}`;
+  const brandedCodeHome = config.homeDirectoryName;
   const homeMigrationPrefix = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`";
   const homeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`"
     + brandedCodeHome + "`);process.env.CODEX_HOME=t,delete process.env.CODEX_ELECTRON_USER_DATA_PATH;try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`"
@@ -269,7 +264,9 @@ function patchMainProcess(platform) {
     throw new Error(`${relPath(mainPath)}: Windows tray GUID was not recognized`);
   }
   const upstreamWindowIconPath = "j=process.platform===`linux`?G5(i,e,T):null";
-  const brandedWindowIconPath = "j=process.platform===`linux`?G5(i,e,T):process.platform===`win32`?(0,p.join)(process.resourcesPath,`aigeek.ico`):null";
+  const brandedWindowIconPath = "j=process.platform===`linux`?G5(i,e,T):process.platform===`win32`?(0,p.join)(process.resourcesPath,`"
+    + windowsBranding.runtimeIconFileName + "`):null";
+  const existingWindowIconPath = /j=process\.platform===`linux`\?G5\(i,e,T\):process\.platform===`win32`\?\(0,p\.join\)\(process\.resourcesPath,`[^`]+`\):null/g;
   if (main.includes(upstreamWindowIconPath)) {
     main = replaceExact(
       main,
@@ -279,12 +276,19 @@ function patchMainProcess(platform) {
       mainPath,
     );
   } else if (!main.includes(brandedWindowIconPath)) {
-    throw new Error(`${relPath(mainPath)}: Windows window icon path was not recognized`);
+    main = replaceSinglePattern(
+      main,
+      existingWindowIconPath,
+      brandedWindowIconPath,
+      "previous Windows window icon path",
+      mainPath,
+    );
   }
   const upstreamWindowAppDetails = "webPreferences:j});this.applyWindowBackdrop(P,o,!0);let F=P.webContents";
   const brandedWindowAppDetails = "webPreferences:j});process.platform===`win32`&&P.setAppDetails?.({appId:`"
-    + config.windowsAppUserModelId
-    + "`,appIconPath:this.options.windowIconPath??process.execPath,appIconIndex:0,relaunchCommand:(0,p.join)((0,p.dirname)(process.execPath),`AIGeek.exe`),relaunchDisplayName:`"
+    + windowsBranding.appUserModelId
+    + "`,appIconPath:this.options.windowIconPath??process.execPath,appIconIndex:0,relaunchCommand:(0,p.join)((0,p.dirname)(process.execPath),`"
+    + windowsBranding.executableName + "`),relaunchDisplayName:`"
     + config.appName
     + "`}),this.applyWindowBackdrop(P,o,!0);let F=P.webContents";
   const existingWindowAppDetails = /process\.platform===`win32`&&([A-Za-z_$][\w$]*)\.setAppDetails\?\.\(\{appId:`[^`]+`,appIconPath:this\.options\.windowIconPath\?\?process\.execPath,appIconIndex:0,relaunchCommand:\(0,([A-Za-z_$][\w$]*)\.join\)\(\(0,\2\.dirname\)\(process\.execPath\),`([^`]+)`\),relaunchDisplayName:`[^`]+`\}\)/g;
@@ -300,11 +304,11 @@ function patchMainProcess(platform) {
     main = replaceSinglePattern(
       main,
       existingWindowAppDetails,
-      (_match, windowVariable, pathVariable, executableName) => "process.platform===`win32`&&"
-        + windowVariable + ".setAppDetails?.({appId:`" + config.windowsAppUserModelId
+      (_match, windowVariable, pathVariable) => "process.platform===`win32`&&"
+        + windowVariable + ".setAppDetails?.({appId:`" + windowsBranding.appUserModelId
         + "`,appIconPath:this.options.windowIconPath??process.execPath,appIconIndex:0,relaunchCommand:(0,"
         + pathVariable + ".join)((0," + pathVariable + ".dirname)(process.execPath),`"
-        + executableName + "`),relaunchDisplayName:`" + config.appName + "`})",
+        + windowsBranding.executableName + "`),relaunchDisplayName:`" + config.appName + "`})",
       "previous Windows window app details",
       mainPath,
     );
@@ -361,16 +365,16 @@ async function patchWindowsRuntimeIcon(platform) {
   if (platform !== "win") return null;
 
   const upstreamRuntimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
-  const brandedRuntimeExe = path.join(SRC_DIR, "win", "runtime", "AIGeek.exe");
+  const brandedRuntimeExe = path.join(SRC_DIR, "win", "runtime", windowsBranding.executableName);
   const runtimeResourcesDir = path.join(SRC_DIR, "win", "runtime", "resources");
-  const packagedResourcesIcon = path.join(SRC_DIR, "win", "aigeek.ico");
-  const runtimeResourcesIcon = path.join(runtimeResourcesDir, "aigeek.ico");
+  const packagedResourcesIcon = path.join(SRC_DIR, "win", windowsBranding.runtimeIconFileName);
+  const runtimeResourcesIcon = path.join(runtimeResourcesDir, windowsBranding.runtimeIconFileName);
   if (!fs.existsSync(upstreamRuntimeExe)) {
     throw new Error("win: runtime executable was not found");
   }
 
   // BrowserWindow loads this path for both the unpackaged runtime and a Forge
-  // package. The latter receives src/win/aigeek.ico through packageAfterCopy.
+  // package. The latter receives the configured Windows icon through packageAfterCopy.
   fs.mkdirSync(runtimeResourcesDir, { recursive: true });
   patchWindowsRuntimeIdentity(WINDOWS_RUNTIME_INI);
   fs.copyFileSync(WINDOWS_ICON_SOURCE, runtimeResourcesIcon);
@@ -394,7 +398,7 @@ async function patchWindowsRuntimeIcon(platform) {
     ProductName: config.appName,
     FileDescription: `${config.appName} Desktop`,
     CompanyName: config.author,
-    OriginalFilename: `${config.appName}.exe`,
+    OriginalFilename: windowsBranding.executableName,
   });
   return relPath(brandedRuntimeExe);
 }
@@ -405,15 +409,21 @@ function patchWindowsRuntimeIdentity(iniPath) {
   }
 
   const upstream = "UserDataDirectoryName=Codex";
-  const previousBranded = "UserDataDirectoryName=..\\..\\AIGeek";
   const branded = `UserDataDirectoryName=${WINDOWS_RUNTIME_USER_DATA_NAME}`;
   const source = fs.readFileSync(iniPath, "utf-8");
   if (source.includes(upstream)) {
     writeIfChanged(iniPath, replaceExact(source, upstream, branded, "Owl runtime identity", iniPath));
-  } else if (source.includes(previousBranded)) {
-    writeIfChanged(iniPath, replaceExact(source, previousBranded, branded, "previous Owl runtime identity", iniPath));
   } else if (!source.includes(branded)) {
-    throw new Error(`${relPath(iniPath)}: Owl runtime identity was not recognized`);
+    writeIfChanged(
+      iniPath,
+      replaceSinglePattern(
+        source,
+        /UserDataDirectoryName=[^\r\n]+/g,
+        branded,
+        "previous Owl runtime identity",
+        iniPath,
+      ),
+    );
   }
 }
 
@@ -461,15 +471,18 @@ function patchWebviewStartupLogo(platform) {
   const appInitialPath = path.join(assetsDir, appInitialName);
   let source = fs.readFileSync(appInitialPath, "utf-8");
   const upstreamIcon = "a=r===void 0?dg:r";
-  const brandedIcon = "a=r===void 0?e=>(0,pir.jsx)(`img`,{src:`./aigeek-mark.png`,alt:``,\"data-forgecode-startup-icon\":!0,...e}):r";
+  const brandedIcon = "a=r===void 0?e=>(0,pir.jsx)(`img`,{src:`./"
+    + WEBVIEW_ICON_FILE_NAME + "`,alt:``,\"data-forgecode-startup-icon\":!0,...e}):r";
   const upstreamMask = "o=i===void 0?mir:i";
-  const brandedMask = "o=i===void 0?`./aigeek-mark.png`:i";
+  const brandedMask = "o=i===void 0?`./" + WEBVIEW_ICON_FILE_NAME + "`:i";
 
   if (source.includes(upstreamIcon)) {
     source = replaceExact(source, upstreamIcon, brandedIcon, "webview startup icon", appInitialPath);
     source = replaceExact(source, upstreamMask, brandedMask, "webview startup mask", appInitialPath);
   } else if (source.includes("data-forgecode-startup-icon")) {
-    source = source.replaceAll("./forgecode-mark.svg", "./aigeek-mark.png");
+    source = source
+      .replaceAll("./forgecode-mark.svg", "./" + WEBVIEW_ICON_FILE_NAME)
+      .replaceAll("./aigeek-mark.png", "./" + WEBVIEW_ICON_FILE_NAME);
   } else {
     throw new Error(`${relPath(appInitialPath)}: webview startup logo was not recognized`);
   }
@@ -522,12 +535,18 @@ function patchLocaleBrandCopy(platform) {
   const localePath = path.join(assetsDir, localeName);
   let source = fs.readFileSync(localePath, "utf-8");
   const upstream = "\"composer.placeholder.workWithChatGPT\":`使用 ChatGPT Work`";
-  const branded = "\"composer.placeholder.workWithChatGPT\":`使用 ForgeCode`";
+  const branded = "\"composer.placeholder.workWithChatGPT\":`使用 " + config.appName + "`";
 
   if (source.includes(upstream)) {
     source = replaceExact(source, upstream, branded, "Chinese composer placeholder", localePath);
   } else if (!source.includes(branded)) {
-    throw new Error(`${relPath(localePath)}: Chinese composer placeholder was not recognized`);
+    source = replaceSinglePattern(
+      source,
+      /"composer\.placeholder\.workWithChatGPT":`使用 [^`]+`/g,
+      branded,
+      "previous Chinese composer placeholder",
+      localePath,
+    );
   }
   writeIfChanged(localePath, source);
   return relPath(localePath);
@@ -592,25 +611,25 @@ async function main() {
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", localeName), "utf-8")
         : "";
       const runtimeReady = target !== "win"
-        || (fs.existsSync(WINDOWS_RUNTIME_INI)
+      || (fs.existsSync(WINDOWS_RUNTIME_INI)
           && fs.readFileSync(WINDOWS_RUNTIME_INI, "utf-8").includes(`UserDataDirectoryName=${WINDOWS_RUNTIME_USER_DATA_NAME}`)
           && await windowsExecutableHasPrimaryIcon(
-            path.join(SRC_DIR, "win", "runtime", "AIGeek.exe"),
+            path.join(SRC_DIR, "win", "runtime", windowsBranding.executableName),
             WINDOWS_ICON_SOURCE,
           ));
       const ready = packageJson.productName === config.appName
         && index.includes(BLOCK_START)
         && bootstrap.includes(config.devAppName)
-        && bootstrap.includes(config.windowsAppUserModelId)
+        && bootstrap.includes(windowsBranding.appUserModelId)
         && (target !== "win"
           || (mainSource.includes("setAppDetails")
-            && mainSource.includes("appId:`" + config.windowsAppUserModelId + "`")))
+            && mainSource.includes("appId:`" + windowsBranding.appUserModelId + "`")))
         && sqlite.includes(config.devDatabaseFileName)
-        && sqlite.includes(`.${config.databaseFileName.replace(/\.db$/, "")}`)
+        && sqlite.includes(config.homeDirectoryName)
         && onboarding.includes("__forgecodeOnboardingSkipped")
         && appInitial.includes("data-forgecode-startup-icon")
         && appInitial.includes("replyPlaceholder:`Reply`")
-        && locale.includes("\"composer.placeholder.workWithChatGPT\":`使用 ForgeCode`");
+        && locale.includes("\"composer.placeholder.workWithChatGPT\":`使用 " + config.appName + "`");
       console.log(`  [${target}] ${ready && runtimeReady ? "ready" : "needs patch"}`);
       if (!ready || !runtimeReady) process.exitCode = 1;
       continue;

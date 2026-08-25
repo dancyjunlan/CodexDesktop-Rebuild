@@ -2,10 +2,11 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { branding } = require("./branding-config");
 
 const home = os.homedir();
 const sourceDir = path.join(home, ".forgecode");
-const targetDir = path.join(home, ".aigeek");
+const targetDir = path.join(home, branding.homeDirectoryName);
 
 fs.mkdirSync(targetDir, { recursive: true });
 
@@ -15,10 +16,10 @@ for (const fileName of ["auth.json", "config.toml"]) {
   if (fs.existsSync(target) || !fs.existsSync(source)) continue;
 
   if (fileName === "config.toml") {
-    const config = fs.readFileSync(source, "utf-8").replaceAll(".forgecode", ".aigeek");
+    const config = fs.readFileSync(source, "utf-8").replaceAll(".forgecode", branding.homeDirectoryName);
     fs.writeFileSync(target, config, "utf-8");
   } else {
     fs.copyFileSync(source, target);
   }
-  console.log(`[aigeek-home] seeded ${fileName}`);
+  console.log(`[branding-home] seeded ${fileName}`);
 }

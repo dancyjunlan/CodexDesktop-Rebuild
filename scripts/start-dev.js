@@ -8,6 +8,7 @@ const { execFileSync, spawn } = require('child_process');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const { branding } = require('./branding-config');
 
 execFileSync(process.execPath, [path.join(__dirname, 'seed-aigeek-home.js')], {
   cwd: path.join(__dirname, '..'),
@@ -106,10 +107,10 @@ console.log(`[start-dev] CLI Path: ${cliPath}`);
 console.log(`[start-dev] App Root: ${appEntry}`);
 
 // The Windows app's native modules are built for the upstream Owl Electron
-// runtime. AIGeek.exe is a branded copy of that runtime; Codex.exe is only a
+// runtime. The configured launcher is a branded copy of that runtime; Codex.exe is only a
 // small launcher and cannot host the desktop app directly.
 const upstreamRuntime = platform === 'win32'
-  ? path.join(__dirname, '..', 'src', srcPlatform, 'runtime', 'AIGeek.exe')
+  ? path.join(__dirname, '..', 'src', srcPlatform, 'runtime', branding.windows.executableName)
   : null;
 const electronBin = upstreamRuntime && fs.existsSync(upstreamRuntime)
   ? upstreamRuntime
@@ -117,8 +118,8 @@ const electronBin = upstreamRuntime && fs.existsSync(upstreamRuntime)
 console.log(`[start-dev] Runtime: ${electronBin}`);
 const appEnv = {
   ...process.env,
-  // Keep AIGeek settings, sessions, and CLI background state independent.
-  CODEX_HOME: path.join(os.homedir(), '.aigeek'),
+  // Keep the configured product's settings, sessions, and CLI state independent.
+  CODEX_HOME: path.join(os.homedir(), branding.homeDirectoryName),
   CODEX_CLI_PATH: cliPath,
   BUILD_FLAVOR: process.env.BUILD_FLAVOR || 'dev',
   ELECTRON_RENDERER_URL: process.env.ELECTRON_RENDERER_URL || 'app://-/index.html',
