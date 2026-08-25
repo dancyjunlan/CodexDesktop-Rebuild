@@ -7,7 +7,9 @@ SetDatablockOptimize on
 
 !define PRODUCT_NAME "AIGeek"
 !define PRODUCT_PUBLISHER "AIGeek Studio"
-!define PRODUCT_VERSION "26.803.41515"
+!ifndef PRODUCT_VERSION
+!define PRODUCT_VERSION "0.0.0"
+!endif
 
 Name "${PRODUCT_NAME}"
 OutFile "${OUTFILE}"

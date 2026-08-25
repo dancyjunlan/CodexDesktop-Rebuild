@@ -81,6 +81,7 @@ execFileSync(nsis, [
   `/DSEVENZIP_DLL=${sevenZipDll}`,
   `/DDEFAULT_AUTH=${defaultAuthPath}`,
   `/DDEFAULT_CONFIG=${defaultConfigPath}`,
+  `/DPRODUCT_VERSION=${packageVersion}`,
   `/DOUTFILE=${stagingPath}`,
   `/DICON=${iconPath}`,
   installerScript,

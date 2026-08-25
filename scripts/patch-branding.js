@@ -7,8 +7,11 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { execFileSync } = require("child_process");
 const { SRC_DIR, PROJECT_ROOT, relPath } = require("./patch-util");
+const {
+  brandWindowsExecutable,
+  windowsExecutableHasPrimaryIcon,
+} = require("./windows-executable-branding");
 
 const config = JSON.parse(
   fs.readFileSync(path.join(PROJECT_ROOT, "branding.json"), "utf-8"),
@@ -126,6 +129,8 @@ function patchMainProcess(platform) {
   const upstreamAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(i.i(Z))";
   const brandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`"
     + config.windowsAppUserModelId + ".dev`:`" + config.windowsAppUserModelId + "`)";
+  const upstreamWindowsTrayGuid = "case n.js.Prod:return`e5768d8b-6936-4f45-b1ad-4c5fb414cb35`";
+  const brandedWindowsTrayGuid = "case n.js.Prod:return`" + config.windowsTrayGuid + "`";
   const brandedAppDataPath = "a.app.setPath(`appData`,o.join(a.app.getPath(`appData`),`..`,`" + config.appName + "`))";
   const previousHomeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`.aigeek`);try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`.aigeek`),`utf8`):c.copyFileSync(o.join(e,n),r))}}catch(e){}})()";
   const homeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`.aigeek`);process.env.CODEX_HOME=t,delete process.env.CODEX_ELECTRON_USER_DATA_PATH;try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`.aigeek`),`utf8`):c.copyFileSync(o.join(e,n),r))}}catch(e){}})()";
@@ -196,6 +201,17 @@ function patchMainProcess(platform) {
 
   const mainPath = path.join(buildDir, mainName);
   let main = fs.readFileSync(mainPath, "utf-8");
+  if (main.includes(upstreamWindowsTrayGuid)) {
+    main = replaceExact(
+      main,
+      upstreamWindowsTrayGuid,
+      brandedWindowsTrayGuid,
+      "Windows tray GUID",
+      mainPath,
+    );
+  } else if (!main.includes(brandedWindowsTrayGuid)) {
+    throw new Error(`${relPath(mainPath)}: Windows tray GUID was not recognized`);
+  }
   const upstreamWindowIconPath = "j=process.platform===`linux`?G5(i,e,T):null";
   const brandedWindowIconPath = "j=process.platform===`linux`?G5(i,e,T):process.platform===`win32`?(0,p.join)(process.resourcesPath,`aigeek.ico`):null";
   if (main.includes(upstreamWindowIconPath)) {
@@ -247,7 +263,7 @@ function patchMainProcess(platform) {
   return [relPath(bootstrapPath), relPath(mainPath), relPath(sqlitePath)];
 }
 
-function patchWindowsRuntimeIcon(platform) {
+async function patchWindowsRuntimeIcon(platform) {
   if (platform !== "win") return null;
 
   const upstreamRuntimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
@@ -255,15 +271,8 @@ function patchWindowsRuntimeIcon(platform) {
   const runtimeResourcesDir = path.join(SRC_DIR, "win", "runtime", "resources");
   const packagedResourcesIcon = path.join(SRC_DIR, "win", "aigeek.ico");
   const runtimeResourcesIcon = path.join(runtimeResourcesDir, "aigeek.ico");
-  const rceditExe = path.join(
-    PROJECT_ROOT,
-    "node_modules",
-    "electron-winstaller",
-    "vendor",
-    "rcedit.exe",
-  );
-  if (!fs.existsSync(upstreamRuntimeExe) || !fs.existsSync(rceditExe)) {
-    throw new Error("win: runtime icon tooling was not found");
+  if (!fs.existsSync(upstreamRuntimeExe)) {
+    throw new Error("win: runtime executable was not found");
   }
 
   // BrowserWindow loads this path for both the unpackaged runtime and a Forge
@@ -287,18 +296,12 @@ function patchWindowsRuntimeIcon(platform) {
     fs.copyFileSync(upstreamRuntimeExe, brandedRuntimeExe);
   }
 
-  try {
-    execFileSync(rceditExe, [brandedRuntimeExe, "--set-icon", WINDOWS_ICON_SOURCE], {
-      stdio: "pipe",
-    });
-  } catch (error) {
-    const details = error.stderr?.toString("utf-8") ?? "";
-    if (details.includes("Unable to commit changes")) {
-      console.warn("  [win] runtime icon pending: close AIGeek and run the dev command again");
-      return null;
-    }
-    throw error;
-  }
+  await brandWindowsExecutable(brandedRuntimeExe, WINDOWS_ICON_SOURCE, {
+    ProductName: config.appName,
+    FileDescription: `${config.appName} Desktop`,
+    CompanyName: config.author,
+    OriginalFilename: `${config.appName}.exe`,
+  });
   return relPath(brandedRuntimeExe);
 }
 
@@ -405,7 +408,7 @@ function patchLocaleBrandCopy(platform) {
   return relPath(localePath);
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const isCheck = args.includes("--check");
   const platform = args.find((arg) => ["mac-arm64", "mac-x64", "win"].includes(arg));
@@ -459,7 +462,11 @@ function main() {
         : "";
       const runtimeReady = target !== "win"
         || (fs.existsSync(WINDOWS_RUNTIME_INI)
-          && fs.readFileSync(WINDOWS_RUNTIME_INI, "utf-8").includes(`UserDataDirectoryName=${WINDOWS_RUNTIME_USER_DATA_NAME}`));
+          && fs.readFileSync(WINDOWS_RUNTIME_INI, "utf-8").includes(`UserDataDirectoryName=${WINDOWS_RUNTIME_USER_DATA_NAME}`)
+          && await windowsExecutableHasPrimaryIcon(
+            path.join(SRC_DIR, "win", "runtime", "AIGeek.exe"),
+            WINDOWS_ICON_SOURCE,
+          ));
       const ready = packageJson.productName === config.appName
         && index.includes(BLOCK_START)
         && bootstrap.includes(config.devAppName)
@@ -478,7 +485,7 @@ function main() {
     for (const filePath of patchMainProcess(target)) {
       console.log(`  [${target}] ${filePath}`);
     }
-    const runtimeIconPath = patchWindowsRuntimeIcon(target);
+    const runtimeIconPath = await patchWindowsRuntimeIcon(target);
     if (runtimeIconPath) console.log(`  [${target}] ${runtimeIconPath}`);
     console.log(`  [${target}] ${patchOnboarding(target)}`);
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
@@ -486,4 +493,7 @@ function main() {
   }
 }
 
-main();
+main().catch((error) => {
+  console.error(error.stack || error);
+  process.exit(1);
+});

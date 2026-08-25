@@ -75,6 +75,8 @@
     "node-addon-api": "^8.9.0",
     "node-gyp": "^12.4.0",
     "playwright": "^1.61.1",
+    "pe-library": "1.0.1",
+    "resedit": "2.0.3",
     "typescript": "^7.0.2",
     "temp": "^0.9.4",
     "vite": "8.1.5",

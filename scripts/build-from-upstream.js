@@ -15,6 +15,7 @@ const path = require("path");
 const { execSync, execFileSync } = require("child_process");
 const os = require("os");
 const asar = require("@electron/asar");
+const { brandWindowsExecutable } = require("./windows-executable-branding");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
@@ -157,40 +158,16 @@ function resolveCodexVendor(platform) {
   return null;
 }
 
-function setWindowsExecutableIcon(exePath, iconPath) {
-  const rceditExe = path.join(
-    PROJECT_ROOT,
-    "node_modules",
-    "electron-winstaller",
-    "vendor",
-    "rcedit.exe",
-  );
-  if (!fs.existsSync(rceditExe)) {
-    throw new Error("rcedit.exe is required to set the Windows application icon");
-  }
-  execFileSync(rceditExe, [exePath, "--set-icon", iconPath], { stdio: "pipe" });
+async function setWindowsExecutableIdentity(exePath, iconPath, originalFilename) {
+  await brandWindowsExecutable(exePath, iconPath, {
+    ProductName: "AIGeek",
+    FileDescription: "AIGeek Desktop",
+    CompanyName: "AIGeek Studio",
+    OriginalFilename: originalFilename,
+  });
 }
 
-function setWindowsExecutableIdentity(exePath, iconPath) {
-  setWindowsExecutableIcon(exePath, iconPath);
-  const rceditExe = path.join(
-    PROJECT_ROOT,
-    "node_modules",
-    "electron-winstaller",
-    "vendor",
-    "rcedit.exe",
-  );
-  for (const [field, value] of [
-    ["ProductName", "AIGeek"],
-    ["FileDescription", "AIGeek Desktop"],
-    ["CompanyName", "AIGeek Studio"],
-    ["OriginalFilename", "AIGeek.exe"],
-  ]) {
-    execFileSync(rceditExe, [exePath, "--set-version-string", field, value], { stdio: "pipe" });
-  }
-}
-
-function buildWindowsLauncher(destination, iconPath) {
+async function buildWindowsLauncher(destination, iconPath) {
   if (!fs.existsSync(WINDOWS_CSC)) {
     throw new Error("Windows C# compiler was not found; cannot build the AIGeek launcher");
   }
@@ -201,7 +178,7 @@ function buildWindowsLauncher(destination, iconPath) {
     "/out:" + destination,
     WINDOWS_LAUNCHER_SOURCE,
   ], { stdio: "pipe" });
-  setWindowsExecutableIdentity(destination, iconPath);
+  await setWindowsExecutableIdentity(destination, iconPath, "AIGeek.exe");
 }
 
 function patchWindowsRuntimeIdentity(resourcesDir) {
@@ -318,9 +295,13 @@ async function buildWin(platform) {
   const tempDir = path.join(require("os").tmpdir(), "codex-sync");
   const extractDir = path.join(tempDir, "win-extract");
   const appDir = path.join(extractDir, "app");
+  const checkedInRuntimeDir = path.join(platformDir, "runtime");
+  const hasCompleteCachedRuntime = fs.existsSync(path.join(appDir, "ChatGPT.exe"))
+    && fs.existsSync(path.join(appDir, "resources", "owl-app.ini"));
+  const hasCheckedInRuntime = fs.existsSync(path.join(checkedInRuntimeDir, "ChatGPT.exe"));
 
-  if (!fs.existsSync(appDir)) {
-    console.error(`[x] MSIX extract not found. Run sync-upstream first.`);
+  if (!hasCompleteCachedRuntime && !hasCheckedInRuntime) {
+    console.error(`[x] Windows runtime is unavailable. Run sync-upstream first.`);
     process.exit(1);
   }
 
@@ -337,12 +318,27 @@ async function buildWin(platform) {
     process.env.UV_THREADPOOL_SIZE = String(copyConcurrency);
   }
   fs.mkdirSync(resourcesDir, { recursive: true });
-  console.log(`   [copy] MSIX app/ -> out/ (${copyConcurrency} workers)`);
-  const copyPromise = copyRecursiveConcurrent(appDir, outApp, {
-    concurrency: copyConcurrency,
-    skip: (relativePath, entry) =>
-      !entry.isDirectory() && relativePath === path.join("resources", "app.asar"),
-  });
+  let copyPromise;
+  if (hasCompleteCachedRuntime) {
+    console.log(`   [copy] MSIX app/ -> out/ (${copyConcurrency} workers)`);
+    copyPromise = copyRecursiveConcurrent(appDir, outApp, {
+      concurrency: copyConcurrency,
+      skip: (relativePath, entry) =>
+        !entry.isDirectory() && relativePath === path.join("resources", "app.asar"),
+    });
+  } else {
+    // %TEMP% can be cleaned by Windows between sync and build. The sync step
+    // also snapshots the runtime and resources under src/win, so rebuild from
+    // that durable source instead of failing on a missing cache.
+    console.log(`   [copy] src/win runtime snapshot -> out/ (${copyConcurrency} workers)`);
+    copyPromise = Promise.all([
+      copyRecursiveConcurrent(checkedInRuntimeDir, outApp, { concurrency: copyConcurrency }),
+      copyRecursiveConcurrent(platformDir, resourcesDir, {
+        concurrency: copyConcurrency,
+        skip: (relativePath) => relativePath === "_asar" || relativePath === "runtime",
+      }),
+    ]).then(([runtimeFiles, resourceFiles]) => runtimeFiles + resourceFiles);
+  }
   console.log("   [asar pack] _asar/ -> app.asar (parallel with copy)");
   const [copied] = await Promise.all([
     copyPromise,
@@ -371,8 +367,8 @@ async function buildWin(platform) {
   // independent Chromium data directory. The Owl host cannot do that itself:
   // it only accepts a directory name below Roaming\\Codex\\web.
   fs.copyFileSync(upstreamRuntimeExe, brandedRuntimeExe);
-  setWindowsExecutableIdentity(brandedRuntimeExe, iconPath);
-  buildWindowsLauncher(path.join(outApp, "AIGeek.exe"), iconPath);
+  await setWindowsExecutableIdentity(brandedRuntimeExe, iconPath, "AIGeekHost.exe");
+  await buildWindowsLauncher(path.join(outApp, "AIGeek.exe"), iconPath);
   fs.rmSync(upstreamRuntimeExe, { force: true });
 
   // The extracted upstream runtime is too large for a responsive self-

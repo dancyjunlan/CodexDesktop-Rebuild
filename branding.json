@@ -5,6 +5,7 @@
   "description": "A focused desktop workspace for coding with AI.",
   "devAppName": "AIGeek (Dev)",
   "windowsAppUserModelId": "studio.aigeek.desktop",
+  "windowsTrayGuid": "0f6c3f6f-6752-4cd3-a80b-641391a9fa70",
   "databaseFileName": "aigeek.db",
   "devDatabaseFileName": "aigeek-dev.db",
   "copyright": "Copyright (c) AIGeek Studio"
