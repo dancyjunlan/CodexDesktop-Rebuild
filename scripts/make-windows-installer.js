@@ -58,8 +58,10 @@ const stagingPath = path.join(outputDirectory, `${installerFile.name}.building${
 const payloadPath = path.join(outputDirectory, `${installerFile.name}-payload.7z`);
 const payloadStagingPath = path.join(outputDirectory, `${installerFile.name}-payload.building.7z`);
 const preparedConfigPath = path.join(outputDirectory, `${installerFile.name}-default-config.toml`);
+const preparedInstallerScriptPath = path.join(outputDirectory, `${installerFile.name}-script.building.nsi`);
 fs.rmSync(stagingPath, { force: true });
 fs.rmSync(payloadStagingPath, { force: true });
+fs.rmSync(preparedInstallerScriptPath, { force: true });
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -106,6 +108,11 @@ function prepareDefaultConfig() {
   fs.writeFileSync(preparedConfigPath, config, "utf-8");
 }
 
+function prepareInstallerScript() {
+  const source = fs.readFileSync(installerScript, "utf-8");
+  fs.writeFileSync(preparedInstallerScriptPath, `\uFEFF${source}`, "utf-8");
+}
+
 prepareDefaultConfig();
 
 // LZMA2 allows 7-Zip to compress the large Chromium payload on several CPU
@@ -134,27 +141,32 @@ fs.renameSync(payloadStagingPath, payloadPath);
 // staging filename so the public installer path can never be a half-written
 // executable that reports an integrity error when opened during a build.
 console.log("[installer] wrapping compressed payload with NSIS...");
-execFileSync(nsis, [
-  "/V2",
-  `/DAPPDIR=${appDirectory}`,
-  `/DPAYLOAD=${payloadPath}`,
-  `/DSEVENZIP=${sevenZip}`,
-  `/DSEVENZIP_DLL=${sevenZipDll}`,
-  `/DDEFAULT_AUTH=${defaultAuthPath}`,
-  `/DDEFAULT_CONFIG=${preparedConfigPath}`,
-  `/DTOOLS=${toolsPath}`,
-  `/DTOOLS_DIRECTORY_NAME=${branding.toolsDirectoryName}`,
-  `/DPRODUCT_VERSION=${packageVersion}`,
-  `/DPRODUCT_NAME=${branding.appName}`,
-  `/DPRODUCT_PUBLISHER=${branding.author}`,
-  `/DAPP_USER_MODEL_ID=${windowsBranding.appUserModelId}`,
-  `/DHOME_DIRECTORY_NAME=${branding.homeDirectoryName}`,
-  `/DEXECUTABLE_NAME=${windowsBranding.executableName}`,
-  `/DLEGACY_PRODUCT_NAME=${windowsBranding.legacyProductName || ""}`,
-  `/DOUTFILE=${stagingPath}`,
-  `/DICON=${windowsIconPath}`,
-  installerScript,
-], { stdio: "inherit" });
+try {
+  prepareInstallerScript();
+  execFileSync(nsis, [
+    "/V2",
+    `/DAPPDIR=${appDirectory}`,
+    `/DPAYLOAD=${payloadPath}`,
+    `/DSEVENZIP=${sevenZip}`,
+    `/DSEVENZIP_DLL=${sevenZipDll}`,
+    `/DDEFAULT_AUTH=${defaultAuthPath}`,
+    `/DDEFAULT_CONFIG=${preparedConfigPath}`,
+    `/DTOOLS=${toolsPath}`,
+    `/DTOOLS_DIRECTORY_NAME=${branding.toolsDirectoryName}`,
+    `/DPRODUCT_VERSION=${packageVersion}`,
+    `/DPRODUCT_NAME=${branding.appName}`,
+    `/DPRODUCT_PUBLISHER=${branding.author}`,
+    `/DAPP_USER_MODEL_ID=${windowsBranding.appUserModelId}`,
+    `/DHOME_DIRECTORY_NAME=${branding.homeDirectoryName}`,
+    `/DEXECUTABLE_NAME=${windowsBranding.executableName}`,
+    `/DLEGACY_PRODUCT_NAME=${windowsBranding.legacyProductName || ""}`,
+    `/DOUTFILE=${stagingPath}`,
+    `/DICON=${windowsIconPath}`,
+    preparedInstallerScriptPath,
+  ], { stdio: "inherit" });
+} finally {
+  fs.rmSync(preparedInstallerScriptPath, { force: true });
+}
 if (!fs.existsSync(stagingPath) || fs.statSync(stagingPath).size === 0) {
   throw new Error("NSIS did not produce a completed installer.");
 }
