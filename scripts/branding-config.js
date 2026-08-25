@@ -16,6 +16,7 @@ function requireBranding() {
   for (const name of [
     "appName",
     "appBrand",
+    "assetRevision",
     "sidebarName",
     "homeGreeting",
     "packageName",
@@ -62,7 +63,7 @@ function requireBranding() {
     requireString(branding.windows?.[name], `windows.${name}`);
   }
 
-  for (const name of ["webview", "webviewSmall", "webviewAnimation", "windows", "macos", "linux", "packager"]) {
+  for (const name of ["webview", "webviewSmall", "titlebar", "webviewAnimation", "windows", "macos", "linux", "packager"]) {
     requireString(branding.icons?.[name], `icons.${name}`);
   }
   for (const name of ["mint", "coral", "ink"]) {

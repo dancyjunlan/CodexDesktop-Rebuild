@@ -17,11 +17,14 @@ const RESOURCE_DIR = path.join(PROJECT_ROOT, "resources");
 const windowsBranding = config.windows;
 const MARK_SOURCE = iconPath("webview");
 const SMALL_MARK_SOURCE = iconPath("webviewSmall");
+const TITLEBAR_MARK_SOURCE = iconPath("titlebar");
 const SHATTER_SOURCE = iconPath("webviewAnimation");
 const WINDOWS_ICON_SOURCE = iconPath("windows");
 const WEBVIEW_ICON_FILE_NAME = path.basename(config.icons.webview);
 const WEBVIEW_SMALL_ICON_FILE_NAME = path.basename(config.icons.webviewSmall);
+const TITLEBAR_ICON_FILE_NAME = `branding-titlebar${path.extname(config.icons.titlebar)}`;
 const WEBVIEW_ANIMATION_FILE_NAME = path.basename(config.icons.webviewAnimation);
+const BRAND_ASSET_REVISION = encodeURIComponent(config.assetRevision);
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
 const WINDOWS_RUNTIME_INI = path.join(SRC_DIR, "win", "owl-app.ini");
@@ -69,8 +72,8 @@ function patchWebview(platform) {
   const indexPath = path.join(webviewDir, "index.html");
   const brandingBlock = [
     BLOCK_START,
-    '    <link rel="stylesheet" href="./forgecode-branding.css" />',
-    '    <script defer src="./forgecode-branding.js"></script>',
+    `    <link rel="stylesheet" href="./forgecode-branding.css?v=${BRAND_ASSET_REVISION}" />`,
+    `    <script defer src="./forgecode-branding.js?v=${BRAND_ASSET_REVISION}"></script>`,
     `    ${BLOCK_END}`,
   ].join("\n");
 
@@ -86,6 +89,7 @@ function patchWebview(platform) {
 
   fs.copyFileSync(MARK_SOURCE, path.join(webviewDir, WEBVIEW_ICON_FILE_NAME));
   fs.copyFileSync(SMALL_MARK_SOURCE, path.join(webviewDir, WEBVIEW_SMALL_ICON_FILE_NAME));
+  fs.copyFileSync(TITLEBAR_MARK_SOURCE, path.join(webviewDir, TITLEBAR_ICON_FILE_NAME));
   fs.copyFileSync(SHATTER_SOURCE, path.join(webviewDir, WEBVIEW_ANIMATION_FILE_NAME));
   const style = fs
     .readFileSync(STYLE_SOURCE, "utf-8")
@@ -100,6 +104,8 @@ function patchWebview(platform) {
     .replace('"__FORGECODE_SIDEBAR_NAME__"', JSON.stringify(config.sidebarName))
     .replace('"__FORGECODE_HOME_GREETING__"', JSON.stringify(config.homeGreeting))
     .replace('"__BRANDING_WEBVIEW_ICON__"', JSON.stringify(WEBVIEW_ICON_FILE_NAME))
+    .replace('"__BRANDING_TITLEBAR_ICON__"', JSON.stringify(TITLEBAR_ICON_FILE_NAME))
+    .replace('"__BRANDING_ASSET_REVISION__"', JSON.stringify(config.assetRevision))
     .replace('"__BRANDING_WEBVIEW_ANIMATION__"', JSON.stringify(WEBVIEW_ANIMATION_FILE_NAME));
   writeIfChanged(path.join(webviewDir, "forgecode-branding.js"), script);
 
@@ -447,12 +453,12 @@ function patchOnboarding(platform) {
   );
   const headerIconMarker = '"data-branding-onboarding-header-icon":!0';
   const brandedHeaderIcon = "`img`,{alt:``,\"aria-hidden\":!0,className:`block size-full object-contain`,"
-    + headerIconMarker + ",draggable:!1,src:`./" + WEBVIEW_SMALL_ICON_FILE_NAME + "`}";
+    + headerIconMarker + ",draggable:!1,src:`./" + TITLEBAR_ICON_FILE_NAME + "`}";
   if (onboarding.includes(headerIconMarker)) {
     onboarding = replaceSinglePattern(
       onboarding,
       /(`img`,\{alt:``,"aria-hidden":!0,className:`block size-full object-contain`,"data-branding-onboarding-header-icon":!0,draggable:!1,src:)`\.\/[^`]+`/g,
-      "$1`./" + WEBVIEW_SMALL_ICON_FILE_NAME + "`",
+      "$1`./" + TITLEBAR_ICON_FILE_NAME + "`",
       "previous onboarding header brand icon",
       onboardingPath,
     );
@@ -698,6 +704,10 @@ async function main() {
     if (isCheck) {
       const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf-8"));
       const index = fs.readFileSync(indexPath, "utf-8");
+      const brandingScriptPath = path.join(asarDir, "webview", "forgecode-branding.js");
+      const brandingScript = fs.existsSync(brandingScriptPath)
+        ? fs.readFileSync(brandingScriptPath, "utf-8")
+        : "";
       const buildDir = path.join(asarDir, ".vite", "build");
       const bootstrapName = fs.readdirSync(buildDir).find((file) => /^bootstrap-.*\.js$/.test(file));
       const sqliteName = fs.readdirSync(buildDir).find((file) => {
@@ -743,6 +753,10 @@ async function main() {
         && packageJson.codexAppBrand === config.appBrand
         && rendererAppBrand === config.appBrand
         && index.includes(BLOCK_START)
+        && index.includes(`forgecode-branding.js?v=${BRAND_ASSET_REVISION}`)
+        && brandingScript.includes(TITLEBAR_ICON_FILE_NAME)
+        && brandingScript.includes(config.assetRevision)
+        && fs.existsSync(path.join(asarDir, "webview", TITLEBAR_ICON_FILE_NAME))
         && bootstrap.includes(config.devAppName)
         && bootstrap.includes(windowsBranding.appUserModelId)
         && (target !== "win"
@@ -753,7 +767,7 @@ async function main() {
         && onboarding.includes("__forgecodeOnboardingSkipped")
         && onboarding.includes("Customize " + config.appName)
         && onboarding.includes('"data-branding-onboarding-header-icon":!0')
-        && onboarding.includes("src:`./" + WEBVIEW_SMALL_ICON_FILE_NAME + "`")
+        && onboarding.includes("src:`./" + TITLEBAR_ICON_FILE_NAME + "`")
         && appInitial.includes("data-forgecode-startup-icon")
         && appInitial.includes("src:`./" + WEBVIEW_ICON_FILE_NAME + "`")
         && appInitial.includes("replyPlaceholder:`Reply`")

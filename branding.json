@@ -1,11 +1,13 @@
 {
   "appName": "IDP",
   "appBrand": "codex",
+  "assetRevision": "20260825-titlebar-idp-1",
   "sidebarName": "IDP",
   "homeGreeting": "IDP智能设计助手",
   "icons": {
     "webview": "resources/idp.png",
     "webviewSmall": "resources/idp.png",
+    "titlebar": "resources/idp.png",
     "webviewAnimation": "resources/idp.gif",
     "windows": "resources/idp.ico",
     "macos": "resources/idp.icns",
