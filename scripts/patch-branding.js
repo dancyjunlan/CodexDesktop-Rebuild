@@ -47,6 +47,11 @@ const NATIVE_LOGOUT_MENU_CLEANUP = "if(Gt){let e=Gt.items.findIndex(e=>e.label==
 const UPSTREAM_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem(se))";
 const BRANDED_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem({...se,visible:!1}))";
 const PERMISSION_MODE_SELECTION_MARKER = "forgecode-enable-permission-mode-selection";
+const FULL_ACCESS_RISK_DESCRIPTION_MARKER = "forgecode-hide-full-access-risk-description";
+const FULL_ACCESS_APP_NAME_MARKER = "forgecode-full-access-app-name";
+const FULL_ACCESS_RISK_DESCRIPTION_UPSTREAM = "let N;t[37]!==l||t[38]!==M?(N=(0,G2.jsx)($L,{className:`text-token-description-foreground`,children:(0,G2.jsx)(`p`,{className:`text-pretty`,children:(0,G2.jsx)(Z,{id:`composer.mode.agentMode.fullAccessConfirm.riskDescriptionByModel`,defaultMessage:`This comes with risks like loss or exposure of sensitive data and prompt injection. {isCyberModel, select, true {We strongly recommend selecting \"Approve for me\" instead, and customizing the reviewer policy for your use case.} other {You can turn this off.}} <link>Learn more</link>`,description:`Risk text in the full-access confirmation dialog; cybersecurity models recommend the safer Approve for me permission mode and customizing its reviewer policy instead of explaining that full access can be turned off`,values:{isCyberModel:l,link:M}})})}),t[37]=l,t[38]=M,t[39]=N):N=t[39];let P;";
+const FULL_ACCESS_RISK_DESCRIPTION_BRANDED = `let N=null/*${FULL_ACCESS_RISK_DESCRIPTION_MARKER}*/;let P;`;
+const FULL_ACCESS_WARNING_DESCRIPTION_UPSTREAM = "defaultMessage:`Codex will be able to run commands, use the internet, and create and edit files anywhere on this computer without your permission. This includes but is not limited to:`";
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -836,6 +841,64 @@ function patchRendererPermissionModeSelection(platform) {
   return relPath(appInitialPath);
 }
 
+function patchRendererPermissionDialog(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) =>
+    /^app-initial-.*\.js$/.test(file),
+  );
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the renderer app bundle`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  let source = fs.readFileSync(appInitialPath, "utf-8");
+  const brandedWarningDescription = `defaultMessage:\`${config.appName} will be able to run commands, use the internet, and create and edit files anywhere on this computer without your permission. This includes but is not limited to:\`/*${FULL_ACCESS_APP_NAME_MARKER}*/`;
+  const brandedWarningPattern = new RegExp(
+    `defaultMessage:\`[^\`]*\`/\\*${FULL_ACCESS_APP_NAME_MARKER}\\*/`,
+  );
+
+  if (config.ui.hideFullAccessRiskDescription) {
+    if (source.includes(FULL_ACCESS_RISK_DESCRIPTION_UPSTREAM)) {
+      source = replaceExact(
+        source,
+        FULL_ACCESS_RISK_DESCRIPTION_UPSTREAM,
+        FULL_ACCESS_RISK_DESCRIPTION_BRANDED,
+        "full-access risk description",
+        appInitialPath,
+      );
+    } else if (!source.includes(FULL_ACCESS_RISK_DESCRIPTION_MARKER)) {
+      throw new Error(`${relPath(appInitialPath)}: full-access risk description was not recognized`);
+    }
+  } else if (source.includes(FULL_ACCESS_RISK_DESCRIPTION_BRANDED)) {
+    source = replaceExact(
+      source,
+      FULL_ACCESS_RISK_DESCRIPTION_BRANDED,
+      FULL_ACCESS_RISK_DESCRIPTION_UPSTREAM,
+      "full-access risk description restoration",
+      appInitialPath,
+    );
+  } else if (!source.includes(FULL_ACCESS_RISK_DESCRIPTION_UPSTREAM)) {
+    throw new Error(`${relPath(appInitialPath)}: full-access risk description restoration was not recognized`);
+  }
+
+  if (source.includes(FULL_ACCESS_WARNING_DESCRIPTION_UPSTREAM)) {
+    source = replaceExact(
+      source,
+      FULL_ACCESS_WARNING_DESCRIPTION_UPSTREAM,
+      brandedWarningDescription,
+      "full-access app name",
+      appInitialPath,
+    );
+  } else if (brandedWarningPattern.test(source)) {
+    source = source.replace(brandedWarningPattern, brandedWarningDescription);
+  } else {
+    throw new Error(`${relPath(appInitialPath)}: full-access warning description was not recognized`);
+  }
+
+  writeIfChanged(appInitialPath, source);
+  return relPath(appInitialPath);
+}
+
 function patchWebviewStartupLogo(platform) {
   const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
   const appInitialName = fs.readdirSync(assetsDir).find((file) => {
@@ -952,6 +1015,9 @@ function patchLocaleBrandNames(platform) {
     ).replace(
       /(\"electron\.onboarding\.welcomeV2\.[^\"]+\":`(?:\\.|[^`])*`)/g,
       (value) => value.replaceAll("Codex", config.appName),
+    ).replace(
+      /(\"composer\.mode\.agentMode\.(?:fullAccessConfirm\.warningDescription|ultraFullAccessConfirm\.(?:description|noFallbackDescription))\.codeMode\":`[^`]*?)Codex/g,
+      `$1${config.appName}`,
     );
     if (next !== source) {
       writeIfChanged(filePath, next);
@@ -1053,6 +1119,8 @@ async function main() {
       const rendererDetailMode = findRendererDetailMode(appInitial)?.currentMode ?? null;
       const rendererWindowsSandboxBanner = appInitial.includes("forgecode-hide-windows-sandbox-banner");
       const rendererPermissionModeSelection = appInitial.includes(PERMISSION_MODE_SELECTION_MARKER);
+      const rendererFullAccessRiskDescription = appInitial.includes(FULL_ACCESS_RISK_DESCRIPTION_MARKER);
+      const rendererFullAccessAppName = appInitial.includes(FULL_ACCESS_APP_NAME_MARKER);
       const locale = localeName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", localeName), "utf-8")
         : "";
@@ -1077,6 +1145,8 @@ async function main() {
         && rendererDetailMode === config.productMode
         && (!config.ui.hideWindowsSandboxBanner || rendererWindowsSandboxBanner)
         && rendererPermissionModeSelection === config.ui.enablePermissionModeSelection
+        && rendererFullAccessRiskDescription === config.ui.hideFullAccessRiskDescription
+        && rendererFullAccessAppName
         && index.includes(BLOCK_START)
         && index.includes(`forgecode-branding.js?v=${BRAND_ASSET_REVISION}`)
         && brandingScript.includes(TITLEBAR_ICON_FILE_NAME)
@@ -1121,6 +1191,7 @@ async function main() {
     const sandboxBannerPath = patchRendererWindowsSandboxBanner(target);
     if (sandboxBannerPath) console.log(`  [${target}] ${sandboxBannerPath}`);
     console.log(`  [${target}] ${patchRendererPermissionModeSelection(target)}`);
+    console.log(`  [${target}] ${patchRendererPermissionDialog(target)}`);
     console.log(`  [${target}] ${patchAppBrandIcon(target)}`);
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
     console.log(`  [${target}] ${patchDesktopNotificationReplyPlaceholder(target)}`);
