@@ -518,6 +518,35 @@ function patchAppBrandIcon(platform) {
   return relPath(appInitialPath);
 }
 
+function findRendererAppBrand(source) {
+  const pattern = /([A-Za-z_$][\w$]*)=`(chatgpt|codex)`,([A-Za-z_$][\w$]*)=([A-Za-z_$][\w$]*)\(\1\)/g;
+  const matches = [...source.matchAll(pattern)];
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function patchRendererAppBrand(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) =>
+    /^app-initial-.*\.js$/.test(file),
+  );
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the renderer app bundle`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  let source = fs.readFileSync(appInitialPath, "utf-8");
+  const match = findRendererAppBrand(source);
+  if (!match) {
+    throw new Error(`${relPath(appInitialPath)}: renderer app brand constant was not recognized`);
+  }
+
+  const [upstream, brandVariable, , labelVariable, formatBrand] = match;
+  const branded = `${brandVariable}=\`${config.appBrand}\`,${labelVariable}=${formatBrand}(${brandVariable})`;
+  source = source.replace(upstream, branded);
+  writeIfChanged(appInitialPath, source);
+  return relPath(appInitialPath);
+}
+
 function patchWebviewStartupLogo(platform) {
   const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
   const appInitialName = fs.readdirSync(assetsDir).find((file) => {
@@ -699,6 +728,7 @@ async function main() {
       const appInitial = appInitialName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", appInitialName), "utf-8")
         : "";
+      const rendererAppBrand = findRendererAppBrand(appInitial)?.[2] ?? null;
       const locale = localeName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", localeName), "utf-8")
         : "";
@@ -711,6 +741,7 @@ async function main() {
           ));
       const ready = packageJson.productName === config.appName
         && packageJson.codexAppBrand === config.appBrand
+        && rendererAppBrand === config.appBrand
         && index.includes(BLOCK_START)
         && bootstrap.includes(config.devAppName)
         && bootstrap.includes(windowsBranding.appUserModelId)
@@ -740,6 +771,7 @@ async function main() {
     const runtimeIconPath = await patchWindowsRuntimeIcon(target);
     if (runtimeIconPath) console.log(`  [${target}] ${runtimeIconPath}`);
     console.log(`  [${target}] ${patchOnboarding(target)}`);
+    console.log(`  [${target}] ${patchRendererAppBrand(target)}`);
     console.log(`  [${target}] ${patchAppBrandIcon(target)}`);
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
     console.log(`  [${target}] ${patchDesktopNotificationReplyPlaceholder(target)}`);
