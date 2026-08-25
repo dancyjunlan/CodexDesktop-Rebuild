@@ -49,7 +49,7 @@ function requireBranding() {
   if (path.isAbsolute(branding.toolsDirectoryName) || branding.toolsDirectoryName.includes("..")) {
     throw new Error("branding.json: toolsDirectoryName must be a relative directory name");
   }
-  for (const name of ["section", "commandPath", "cwdPath"]) {
+  for (const name of ["section", "commandPath", "cwdPath", "stateDirectoryName"]) {
     requireString(branding.bundledMcpServer?.[name], `bundledMcpServer.${name}`);
   }
   for (const name of ["commandPath", "cwdPath"]) {
@@ -57,6 +57,13 @@ function requireBranding() {
     if (path.isAbsolute(value) || value.includes("..")) {
       throw new Error(`branding.json: bundledMcpServer.${name} must be a relative path`);
     }
+  }
+  if (
+    path.isAbsolute(branding.bundledMcpServer.stateDirectoryName) ||
+    branding.bundledMcpServer.stateDirectoryName.includes("..") ||
+    /[\\/]/.test(branding.bundledMcpServer.stateDirectoryName)
+  ) {
+    throw new Error("branding.json: bundledMcpServer.stateDirectoryName must be a directory name");
   }
 
   for (const name of [

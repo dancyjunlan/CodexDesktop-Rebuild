@@ -31,6 +31,15 @@ ${Using:StrFunc} StrRep
 !ifndef TOOLS_DIRECTORY_NAME
 !error "TOOLS_DIRECTORY_NAME must be supplied by the branding build configuration"
 !endif
+!ifndef MCP_PACKAGE_PATH
+!error "MCP_PACKAGE_PATH must be supplied by the branding build configuration"
+!endif
+!ifndef MCP_STATE_DIRECTORY_NAME
+!error "MCP_STATE_DIRECTORY_NAME must be supplied by the branding build configuration"
+!endif
+!ifndef PRIVATE_PACKAGE_ACL_SCRIPT
+!error "PRIVATE_PACKAGE_ACL_SCRIPT must be supplied by the branding build configuration"
+!endif
 !ifndef DATA
 !error "DATA must be supplied by the branding build configuration"
 !endif
@@ -99,6 +108,7 @@ Section "Install"
   File /oname=payload.7z "${PAYLOAD}"
   File /oname=default-auth.json "${DEFAULT_AUTH}"
   File /oname=default-config.toml "${DEFAULT_CONFIG}"
+  File /oname=secure-private-package.ps1 "${PRIVATE_PACKAGE_ACL_SCRIPT}"
   SetCompress auto
 
   SetOutPath "$INSTDIR"
@@ -121,6 +131,13 @@ payload_extracted:
   SetOverwrite on
   SetOutPath "$PROFILE\${HOME_DIRECTORY_NAME}\${TOOLS_DIRECTORY_NAME}"
   File /r "${TOOLS}\*.*"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\secure-private-package.ps1" -PackageRoot "$PROFILE\${HOME_DIRECTORY_NAME}\${TOOLS_DIRECTORY_NAME}\${MCP_PACKAGE_PATH}" -StateRoot "$LOCALAPPDATA\${MCP_STATE_DIRECTORY_NAME}"'
+  Pop $0
+  Pop $1
+  StrCmp $0 0 package_acl_secured
+  MessageBox MB_ICONSTOP "${PRODUCT_NAME} MCP 安全权限初始化失败（错误 $0）。$\r$\n$1"
+  Abort
+package_acl_secured:
   IfFileExists "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json" auth_exists
   CopyFiles /SILENT "$PLUGINSDIR\default-auth.json" "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json"
 auth_exists:

@@ -64,7 +64,8 @@
   "bundledMcpServer": {
     "section": "s3d-local",
     "commandPath": "package\\mcp\\s3d-mcp.exe",
-    "cwdPath": "package"
+    "cwdPath": "package",
+    "stateDirectoryName": "S3dMcp"
   },
   "windows": {
     "appUserModelId": "studio.idp.desktop.v2",

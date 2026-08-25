@@ -16,6 +16,7 @@ const appDirectory = path.join(root, "out", "win", `${windowsExecutableBaseName(
 const outputDirectory = path.join(root, "out", "installer", "win-x64");
 const windowsIconPath = iconPath("windows");
 const installerScript = path.join(root, "resources", "aigeek-installer.nsi");
+const privatePackageAclScript = path.join(root, "resources", "secure-private-package.ps1");
 const defaultAuthPath = path.join(root, "auth.json");
 const defaultConfigPath = path.join(root, "config.toml");
 const dataPath = path.join(root, branding.dataDirectoryName);
@@ -41,6 +42,9 @@ if (!nsis) {
   throw new Error("NSIS was not found. Install it with: winget install NSIS.NSIS");
 }
 if (!fs.existsSync(installerScript)) throw new Error("NSIS installer script is missing.");
+if (!fs.existsSync(privatePackageAclScript)) {
+  throw new Error("Private package ACL script is missing.");
+}
 if (!fs.existsSync(defaultAuthPath) || !fs.existsSync(defaultConfigPath)) {
   throw new Error("Default auth.json and config.toml must exist in the project root.");
 }
@@ -167,9 +171,12 @@ const nsisArguments = [
   `/DSEVENZIP_DLL=${sevenZipDll}`,
   `/DDEFAULT_AUTH=${defaultAuthPath}`,
   `/DDEFAULT_CONFIG=${preparedConfigPath}`,
+  `/DPRIVATE_PACKAGE_ACL_SCRIPT=${privatePackageAclScript}`,
   `/DDATA=${dataPath}`,
   `/DTOOLS=${toolsPath}`,
   `/DTOOLS_DIRECTORY_NAME=${branding.toolsDirectoryName}`,
+  `/DMCP_PACKAGE_PATH=${branding.bundledMcpServer.cwdPath}`,
+  `/DMCP_STATE_DIRECTORY_NAME=${branding.bundledMcpServer.stateDirectoryName}`,
   `/DPRODUCT_VERSION=${packageVersion}`,
   `/DPRODUCT_NAME=${branding.appName}`,
   `/DPRODUCT_PUBLISHER=${branding.author}`,
