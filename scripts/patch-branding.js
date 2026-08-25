@@ -344,7 +344,7 @@ function patchMainProcess(platform) {
 
   if (config.ui.hideNativeHelpMenu) {
     const upstreamHelpMenuBuild = "Ut=l.Menu.buildFromTemplate(Ht)";
-    const brandedHelpMenuBuild = "Ht=Ht.filter(e=>e.id!==et.help),Ut=l.Menu.buildFromTemplate(Ht)";
+    const brandedHelpMenuBuild = "Ut=(Ht=Ht.filter(e=>e.id!==et.help),l.Menu.buildFromTemplate(Ht))";
     if (main.includes(brandedHelpMenuBuild)) {
       // The bundle has already been patched for the configured native menu.
     } else if (main.includes(upstreamHelpMenuBuild)) {
@@ -908,7 +908,7 @@ async function main() {
       });
       const mainSource = mainName ? fs.readFileSync(path.join(buildDir, mainName), "utf-8") : "";
       const nativeHelpVisibilityReady = !config.ui.hideNativeHelpMenu
-        || mainSource.includes("Ht=Ht.filter(e=>e.id!==et.help),Ut=l.Menu.buildFromTemplate(Ht)");
+        || mainSource.includes("Ut=(Ht=Ht.filter(e=>e.id!==et.help),l.Menu.buildFromTemplate(Ht))");
       const nativeSettingsVisibilityReady = !config.ui.hideNativeSettingsMenuItem
         || !mainSource.includes("Wt.append(new l.MenuItem(F))");
       const sqlite = sqliteName ? fs.readFileSync(path.join(buildDir, sqliteName), "utf-8") : "";
