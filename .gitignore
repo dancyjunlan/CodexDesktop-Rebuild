@@ -34,6 +34,11 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Local AIGeek installer defaults. auth.json contains credentials and
+# config.toml is specific to the local provider/runtime setup.
+auth.json
+config.toml
+
 # Temporary files
 *.tmp
 *.temp
