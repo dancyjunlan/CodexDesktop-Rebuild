@@ -118,20 +118,30 @@ function replaceExact(source, search, replacement, label, filePath) {
   return source.replace(search, replacement);
 }
 
+function replaceSinglePattern(source, pattern, replacement, label, filePath) {
+  const flags = pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g";
+  const matches = [...source.matchAll(new RegExp(pattern.source, flags))];
+  if (matches.length !== 1) {
+    throw new Error(`${relPath(filePath)}: expected one ${label} match, found ${matches.length}`);
+  }
+  return source.replace(pattern, replacement);
+}
+
 function patchMainProcess(platform) {
   const buildDir = path.join(SRC_DIR, platform, "_asar", ".vite", "build");
   const bootstrapName = fs.readdirSync(buildDir).find((file) => /^bootstrap-.*\.js$/.test(file));
   const mainName = fs.readdirSync(buildDir).find((file) => {
     if (!/^main-.*\.js$/.test(file)) return false;
     const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
-    return source.includes("windowIconPath:j,globalState");
+    return source.includes("windowIconPath") && source.includes("globalState");
   });
   const sqliteName = fs.readdirSync(buildDir).find((file) => {
     if (!/^src-.*\.js$/.test(file)) return false;
     const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
     return source.includes("`codex-dev.db`")
       || source.includes("`" + PREVIOUS_DEV_DATABASE_FILE_NAME + "`")
-      || source.includes("`" + config.devDatabaseFileName + "`");
+      || source.includes("`" + config.devDatabaseFileName + "`")
+      || /`[^`]+-dev\.db`/.test(source);
   });
   if (!bootstrapName || !mainName || !sqliteName) {
     throw new Error(`${platform}: could not locate main-process branding bundles`);
@@ -144,12 +154,14 @@ function patchMainProcess(platform) {
   const upstreamAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(i.i(Z))";
   const brandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`"
     + config.windowsAppUserModelId + ".dev`:`" + config.windowsAppUserModelId + "`)";
-  const previousBrandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`studio.aigeek.desktop.dev`:`studio.aigeek.desktop`)";
   const upstreamWindowsTrayGuid = "case n.js.Prod:return`e5768d8b-6936-4f45-b1ad-4c5fb414cb35`";
   const brandedWindowsTrayGuid = "case n.js.Prod:return`" + config.windowsTrayGuid + "`";
   const brandedAppDataPath = "a.app.setPath(`appData`,o.join(a.app.getPath(`appData`),`..`,`" + config.appName + "`))";
-  const previousHomeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`.aigeek`);try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`.aigeek`),`utf8`):c.copyFileSync(o.join(e,n),r))}}catch(e){}})()";
-  const homeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`.aigeek`);process.env.CODEX_HOME=t,delete process.env.CODEX_ELECTRON_USER_DATA_PATH;try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`.aigeek`),`utf8`):c.copyFileSync(o.join(e,n),r))}}catch(e){}})()";
+  const brandedCodeHome = `.${config.databaseFileName.replace(/\.db$/, "")}`;
+  const homeMigrationPrefix = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`";
+  const homeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`"
+    + brandedCodeHome + "`);process.env.CODEX_HOME=t,delete process.env.CODEX_ELECTRON_USER_DATA_PATH;try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`"
+    + brandedCodeHome + "`),`utf8`):c.copyFileSync(o.join(e,n),r))}}catch(e){}})()";
   const upstreamSingleInstanceExit = "if(!(!$||a.app.requestSingleInstanceLock()))";
   const brandedSingleInstanceExit = "if(!(!$||!0))";
   const previousAppNameForBuildFlavor = "n===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
@@ -159,14 +171,26 @@ function patchMainProcess(platform) {
   } else if (bootstrap.includes(previousAppNameForBuildFlavor)) {
     bootstrap = replaceExact(bootstrap, previousAppNameForBuildFlavor, appNameForBuildFlavor, "previous user-data app name", bootstrapPath);
   } else if (!bootstrap.includes(appNameForBuildFlavor)) {
-    throw new Error(`${relPath(bootstrapPath)}: user-data app name was not recognized`);
+    bootstrap = replaceSinglePattern(
+      bootstrap,
+      /n===`dev`\?`[^`]+`:`[^`]+`/g,
+      appNameForBuildFlavor,
+      "previous user-data app name",
+      bootstrapPath,
+    );
   }
   if (bootstrap.includes("t.Ta(Z,Q)")) {
     bootstrap = replaceExact(bootstrap, "t.Ta(Z,Q)", appNameForResolvedFlavor, "application name", bootstrapPath);
   } else if (bootstrap.includes(previousAppNameForResolvedFlavor)) {
     bootstrap = replaceExact(bootstrap, previousAppNameForResolvedFlavor, appNameForResolvedFlavor, "previous application name", bootstrapPath);
   } else if (!bootstrap.includes(appNameForResolvedFlavor)) {
-    throw new Error(`${relPath(bootstrapPath)}: application name was not recognized`);
+    bootstrap = replaceSinglePattern(
+      bootstrap,
+      /a\.app\.setName\(Z===`dev`\?`[^`]+`:`[^`]+`\)/g,
+      "a.app.setName(" + appNameForResolvedFlavor + ")",
+      "previous application name",
+      bootstrapPath,
+    );
   }
   if (bootstrap.includes(upstreamAppUserModelId)) {
     bootstrap = replaceExact(
@@ -176,39 +200,47 @@ function patchMainProcess(platform) {
       "Windows AppUserModelID",
       bootstrapPath,
     );
-  } else if (bootstrap.includes(previousBrandedAppUserModelId)) {
-    bootstrap = replaceExact(
+  } else if (!bootstrap.includes(brandedAppUserModelId)) {
+    bootstrap = replaceSinglePattern(
       bootstrap,
-      previousBrandedAppUserModelId,
+      /process\.platform===`win32`&&a\.app\.setAppUserModelId\(Z===`dev`\?`[^`]+`:`[^`]+`\)/g,
       brandedAppUserModelId,
       "previous Windows AppUserModelID",
       bootstrapPath,
     );
-  } else if (!bootstrap.includes(brandedAppUserModelId)) {
-    throw new Error(`${relPath(bootstrapPath)}: Windows AppUserModelID was not recognized`);
   }
   if (!bootstrap.includes(brandedAppDataPath)) {
-    const appNameCall = "a.app.setName(" + appNameForResolvedFlavor + ")";
-    if (!bootstrap.includes(appNameCall)) {
-      throw new Error(`${relPath(bootstrapPath)}: application data path anchor was not recognized`);
+    const existingAppDataPath = /a\.app\.setPath\(`appData`,o\.join\(a\.app\.getPath\(`appData`\),`\.\.`,`[^`]+`\)\)/g;
+    if (existingAppDataPath.test(bootstrap)) {
+      existingAppDataPath.lastIndex = 0;
+      bootstrap = replaceSinglePattern(
+        bootstrap,
+        existingAppDataPath,
+        brandedAppDataPath,
+        "previous application data path",
+        bootstrapPath,
+      );
+    } else {
+      const appNameCall = "a.app.setName(" + appNameForResolvedFlavor + ")";
+      if (!bootstrap.includes(appNameCall)) {
+        throw new Error(`${relPath(bootstrapPath)}: application data path anchor was not recognized`);
+      }
+      bootstrap = replaceExact(
+        bootstrap,
+        appNameCall,
+        appNameCall + "," + brandedAppDataPath + "," + homeMigration,
+        "application data path",
+        bootstrapPath,
+      );
     }
-    bootstrap = replaceExact(
-      bootstrap,
-      appNameCall,
-      appNameCall + "," + brandedAppDataPath + "," + homeMigration,
-      "AIGeek application data path",
-      bootstrapPath,
-    );
-  } else if (bootstrap.includes(previousHomeMigration)) {
-    bootstrap = replaceExact(
-      bootstrap,
-      previousHomeMigration,
-      homeMigration,
-      "previous AIGeek home migration",
-      bootstrapPath,
-    );
-  } else if (!bootstrap.includes(homeMigration)) {
-    throw new Error(`${relPath(bootstrapPath)}: AIGeek home migration was not recognized`);
+  }
+  if (!bootstrap.includes(homeMigration)) {
+    const migrationStart = bootstrap.indexOf(homeMigrationPrefix);
+    const migrationEnd = migrationStart === -1 ? -1 : bootstrap.indexOf("})()", migrationStart);
+    if (migrationEnd === -1) {
+      throw new Error(`${relPath(bootstrapPath)}: application home migration was not recognized`);
+    }
+    bootstrap = bootstrap.slice(0, migrationStart) + homeMigration + bootstrap.slice(migrationEnd + 4);
   }
   if (bootstrap.includes(upstreamSingleInstanceExit)) {
     bootstrap = replaceExact(
@@ -255,9 +287,7 @@ function patchMainProcess(platform) {
     + "`,appIconPath:this.options.windowIconPath??process.execPath,appIconIndex:0,relaunchCommand:(0,p.join)((0,p.dirname)(process.execPath),`AIGeek.exe`),relaunchDisplayName:`"
     + config.appName
     + "`}),this.applyWindowBackdrop(P,o,!0);let F=P.webContents";
-  const previousWindowAppDetails = "webPreferences:j});process.platform===`win32`&&P.setAppDetails?.({appId:`studio.aigeek.desktop`,appIconPath:this.options.windowIconPath??process.execPath,appIconIndex:0,relaunchCommand:(0,p.join)((0,p.dirname)(process.execPath),`AIGeek.exe`),relaunchDisplayName:`"
-    + config.appName
-    + "`}),this.applyWindowBackdrop(P,o,!0);let F=P.webContents";
+  const existingWindowAppDetails = /process\.platform===`win32`&&([A-Za-z_$][\w$]*)\.setAppDetails\?\.\(\{appId:`[^`]+`,appIconPath:this\.options\.windowIconPath\?\?process\.execPath,appIconIndex:0,relaunchCommand:\(0,([A-Za-z_$][\w$]*)\.join\)\(\(0,\2\.dirname\)\(process\.execPath\),`([^`]+)`\),relaunchDisplayName:`[^`]+`\}\)/g;
   if (main.includes(upstreamWindowAppDetails)) {
     main = replaceExact(
       main,
@@ -266,16 +296,18 @@ function patchMainProcess(platform) {
       "Windows window app details",
       mainPath,
     );
-  } else if (main.includes(previousWindowAppDetails)) {
-    main = replaceExact(
+  } else if (!main.includes(brandedWindowAppDetails)) {
+    main = replaceSinglePattern(
       main,
-      previousWindowAppDetails,
-      brandedWindowAppDetails,
+      existingWindowAppDetails,
+      (_match, windowVariable, pathVariable, executableName) => "process.platform===`win32`&&"
+        + windowVariable + ".setAppDetails?.({appId:`" + config.windowsAppUserModelId
+        + "`,appIconPath:this.options.windowIconPath??process.execPath,appIconIndex:0,relaunchCommand:(0,"
+        + pathVariable + ".join)((0," + pathVariable + ".dirname)(process.execPath),`"
+        + executableName + "`),relaunchDisplayName:`" + config.appName + "`})",
       "previous Windows window app details",
       mainPath,
     );
-  } else if (!main.includes(brandedWindowAppDetails)) {
-    throw new Error(`${relPath(mainPath)}: Windows window app details were not recognized`);
   }
   writeIfChanged(mainPath, main);
 
@@ -286,29 +318,39 @@ function patchMainProcess(platform) {
   if (upstreamProdCount === 2 && upstreamDevCount === 2) {
     sqlite = sqlite.replaceAll("`codex.db`", "`" + config.databaseFileName + "`");
     sqlite = sqlite.replaceAll("`codex-dev.db`", "`" + config.devDatabaseFileName + "`");
-  } else if (
-    sqlite.split("`" + PREVIOUS_DATABASE_FILE_NAME + "`").length - 1 === 2
-    && sqlite.split("`" + PREVIOUS_DEV_DATABASE_FILE_NAME + "`").length - 1 === 2
-  ) {
-    sqlite = sqlite.replaceAll("`" + PREVIOUS_DATABASE_FILE_NAME + "`", "`" + config.databaseFileName + "`");
-    sqlite = sqlite.replaceAll("`" + PREVIOUS_DEV_DATABASE_FILE_NAME + "`", "`" + config.devDatabaseFileName + "`");
   } else {
     const brandedProdCount = sqlite.split("`" + config.databaseFileName + "`").length - 1;
     const brandedDevCount = sqlite.split("`" + config.devDatabaseFileName + "`").length - 1;
     if (brandedProdCount !== 2 || brandedDevCount !== 2) {
-      throw new Error(`${relPath(sqlitePath)}: unexpected SQLite filename match count`);
+      const existingDevNames = [...sqlite.matchAll(/`([^`]+-dev\.db)`/g)].map((match) => match[1]);
+      const existingProdNames = [...sqlite.matchAll(/`([^`]+\.db)`/g)]
+        .map((match) => match[1])
+        .filter((name) => !name.endsWith("-dev.db"));
+      const uniqueProdNames = [...new Set(existingProdNames)];
+      const uniqueDevNames = [...new Set(existingDevNames)];
+      if (
+        existingProdNames.length !== 2
+        || existingDevNames.length !== 2
+        || uniqueProdNames.length !== 1
+        || uniqueDevNames.length !== 1
+      ) {
+        throw new Error(`${relPath(sqlitePath)}: unexpected SQLite filename match count`);
+      }
+      sqlite = sqlite.replaceAll("`" + uniqueProdNames[0] + "`", "`" + config.databaseFileName + "`");
+      sqlite = sqlite.replaceAll("`" + uniqueDevNames[0] + "`", "`" + config.devDatabaseFileName + "`");
     }
   }
-  const upstreamHome = "i.join(r.homedir(),`.codex`)";
-  const previousBrandedHome = "i.join(r.homedir(),`.forgecode`)";
-  const brandedHome = "i.join(r.homedir(),`.aigeek`)";
-  const upstreamHomeCount = sqlite.split(upstreamHome).length - 1;
-  if (upstreamHomeCount === 2) {
-    sqlite = sqlite.replaceAll(upstreamHome, brandedHome);
-  } else if ((sqlite.split(previousBrandedHome).length - 1) === 2) {
-    sqlite = sqlite.replaceAll(previousBrandedHome, brandedHome);
-  } else if ((sqlite.split(brandedHome).length - 1) !== 2) {
-    throw new Error(`${relPath(sqlitePath)}: unexpected CODEX_HOME fallback match count`);
+  const brandedHome = "i.join(r.homedir(),`" + brandedCodeHome + "`)";
+  if ((sqlite.split(brandedHome).length - 1) !== 2) {
+    const existingHomes = [...sqlite.matchAll(/i\.join\(r\.homedir\(\),`([^`]+)`\)/g)].map((match) => match[1]);
+    const uniqueHomes = [...new Set(existingHomes)];
+    if (existingHomes.length !== 2 || uniqueHomes.length !== 1) {
+      throw new Error(`${relPath(sqlitePath)}: unexpected CODEX_HOME fallback match count`);
+    }
+    sqlite = sqlite.replaceAll(
+      "i.join(r.homedir(),`" + uniqueHomes[0] + "`)",
+      brandedHome,
+    );
   }
   writeIfChanged(sqlitePath, sqlite);
 
@@ -535,7 +577,8 @@ async function main() {
       const bootstrap = bootstrapName ? fs.readFileSync(path.join(buildDir, bootstrapName), "utf-8") : "";
       const mainName = fs.readdirSync(buildDir).find((file) => {
         if (!/^main-.*\.js$/.test(file)) return false;
-        return fs.readFileSync(path.join(buildDir, file), "utf-8").includes("windowIconPath:j,globalState");
+        const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
+        return source.includes("windowIconPath") && source.includes("globalState");
       });
       const mainSource = mainName ? fs.readFileSync(path.join(buildDir, mainName), "utf-8") : "";
       const sqlite = sqliteName ? fs.readFileSync(path.join(buildDir, sqliteName), "utf-8") : "";
@@ -563,7 +606,7 @@ async function main() {
           || (mainSource.includes("setAppDetails")
             && mainSource.includes("appId:`" + config.windowsAppUserModelId + "`")))
         && sqlite.includes(config.devDatabaseFileName)
-        && sqlite.includes(".aigeek")
+        && sqlite.includes(`.${config.databaseFileName.replace(/\.db$/, "")}`)
         && onboarding.includes("__forgecodeOnboardingSkipped")
         && appInitial.includes("data-forgecode-startup-icon")
         && appInitial.includes("replyPlaceholder:`Reply`")

@@ -1,23 +1,23 @@
 {
-  "appName": "AIGeek",
-  "sidebarName": "艾极科技",
-  "homeGreeting": "艾极科技智能设计助手",
+  "appName": "IDP",
+  "sidebarName": "IDP",
+  "homeGreeting": "IDP智能设计助手",
   "icons": {
-    "webview": "resources/aigeek-mark.png",
-    "webviewSmall": "resources/aigeek-mark-256.png",
-    "webviewAnimation": "resources/aigeek-logo-shatter.gif",
-    "windows": "resources/forgecode.ico",
-    "macos": "resources/forgecode.icns",
-    "linux": "resources/forgecode.png",
-    "packager": "resources/forgecode"
+    "webview": "resources/idp.png",
+    "webviewSmall": "resources/idp.png",
+    "webviewAnimation": "resources/idp.gif",
+    "windows": "resources/idp.ico",
+    "macos": "resources/idp.icns",
+    "linux": "resources/idp.png",
+    "packager": "resources/idp"
   },
-  "packageName": "forgecode-desktop",
-  "author": "AIGeek Studio",
+  "packageName": "idp-desktop",
+  "author": "IDP Studio",
   "description": "A focused desktop workspace for coding with AI.",
-  "devAppName": "AIGeek (Dev)",
-  "windowsAppUserModelId": "studio.aigeek.desktop.v2",
+  "devAppName": "IDP (Dev)",
+  "windowsAppUserModelId": "studio.idp.desktop.v2",
   "windowsTrayGuid": "0f6c3f6f-6752-4cd3-a80b-641391a9fa70",
-  "databaseFileName": "aigeek.db",
-  "devDatabaseFileName": "aigeek-dev.db",
-  "copyright": "Copyright (c) AIGeek Studio"
+  "databaseFileName": "idp.db",
+  "devDatabaseFileName": "idp-dev.db",
+  "copyright": "Copyright (c) IDP Studio"
 }
