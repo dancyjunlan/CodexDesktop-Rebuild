@@ -46,6 +46,7 @@ const NATIVE_HELP_MENU_CLEANUP = "for(let e=Ut.items.length-1;e>=0;e--)Ut.items[
 const NATIVE_LOGOUT_MENU_CLEANUP = "if(Gt){let e=Gt.items.findIndex(e=>e.label===se.label);if(e>=0){Gt.removeAt(e);if(e>0&&Gt.items[e-1].type===`separator`)Gt.removeAt(e-1)}}";
 const UPSTREAM_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem(se))";
 const BRANDED_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem({...se,visible:!1}))";
+const PERMISSION_MODE_SELECTION_MARKER = "forgecode-enable-permission-mode-selection";
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -765,6 +766,76 @@ function patchRendererWindowsSandboxBanner(platform) {
   return relPath(appInitialPath);
 }
 
+function patchRendererPermissionModeSelection(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) =>
+    /^app-initial-.*\.js$/.test(file),
+  );
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the renderer app bundle`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  let source = fs.readFileSync(appInitialPath, "utf-8");
+  const upstreamSandboxGate = "let{isRequired:ue}=rOs(le),de=";
+  const brandedSandboxGate = `let{isRequired:ue}=rOs(le);ue=!1/*${PERMISSION_MODE_SELECTION_MARKER}*/;let de=`;
+  const upstreamVisibilityState = "function cUs(e){return e??pUs}";
+  const brandedVisibilityState = `function cUs(e){return{...pUs,...e,\"full-access\":!0}/*${PERMISSION_MODE_SELECTION_MARKER}*/}`;
+
+  if (config.ui.enablePermissionModeSelection) {
+    if (source.includes(upstreamSandboxGate)) {
+      source = replaceExact(
+        source,
+        upstreamSandboxGate,
+        brandedSandboxGate,
+        "permission mode Windows sandbox gate",
+        appInitialPath,
+      );
+    } else if (!source.includes(brandedSandboxGate)) {
+      throw new Error(`${relPath(appInitialPath)}: permission mode Windows sandbox gate was not recognized`);
+    }
+
+    if (source.includes(upstreamVisibilityState)) {
+      source = replaceExact(
+        source,
+        upstreamVisibilityState,
+        brandedVisibilityState,
+        "permission mode visibility state",
+        appInitialPath,
+      );
+    } else if (!source.includes(brandedVisibilityState)) {
+      throw new Error(`${relPath(appInitialPath)}: permission mode visibility state was not recognized`);
+    }
+  } else {
+    if (source.includes(brandedSandboxGate)) {
+      source = replaceExact(
+        source,
+        brandedSandboxGate,
+        upstreamSandboxGate,
+        "permission mode Windows sandbox gate restoration",
+        appInitialPath,
+      );
+    } else if (!source.includes(upstreamSandboxGate)) {
+      throw new Error(`${relPath(appInitialPath)}: permission mode Windows sandbox gate restoration was not recognized`);
+    }
+
+    if (source.includes(brandedVisibilityState)) {
+      source = replaceExact(
+        source,
+        brandedVisibilityState,
+        upstreamVisibilityState,
+        "permission mode visibility state restoration",
+        appInitialPath,
+      );
+    } else if (!source.includes(upstreamVisibilityState)) {
+      throw new Error(`${relPath(appInitialPath)}: permission mode visibility state restoration was not recognized`);
+    }
+  }
+
+  writeIfChanged(appInitialPath, source);
+  return relPath(appInitialPath);
+}
+
 function patchWebviewStartupLogo(platform) {
   const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
   const appInitialName = fs.readdirSync(assetsDir).find((file) => {
@@ -981,6 +1052,7 @@ async function main() {
       const rendererProductMode = findRendererProductMode(appInitial)?.fixedMode ?? null;
       const rendererDetailMode = findRendererDetailMode(appInitial)?.currentMode ?? null;
       const rendererWindowsSandboxBanner = appInitial.includes("forgecode-hide-windows-sandbox-banner");
+      const rendererPermissionModeSelection = appInitial.includes(PERMISSION_MODE_SELECTION_MARKER);
       const locale = localeName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", localeName), "utf-8")
         : "";
@@ -1004,6 +1076,7 @@ async function main() {
         && rendererProductMode === config.productMode
         && rendererDetailMode === config.productMode
         && (!config.ui.hideWindowsSandboxBanner || rendererWindowsSandboxBanner)
+        && rendererPermissionModeSelection === config.ui.enablePermissionModeSelection
         && index.includes(BLOCK_START)
         && index.includes(`forgecode-branding.js?v=${BRAND_ASSET_REVISION}`)
         && brandingScript.includes(TITLEBAR_ICON_FILE_NAME)
@@ -1047,6 +1120,7 @@ async function main() {
     console.log(`  [${target}] ${patchRendererProductMode(target)}`);
     const sandboxBannerPath = patchRendererWindowsSandboxBanner(target);
     if (sandboxBannerPath) console.log(`  [${target}] ${sandboxBannerPath}`);
+    console.log(`  [${target}] ${patchRendererPermissionModeSelection(target)}`);
     console.log(`  [${target}] ${patchAppBrandIcon(target)}`);
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
     console.log(`  [${target}] ${patchDesktopNotificationReplyPlaceholder(target)}`);

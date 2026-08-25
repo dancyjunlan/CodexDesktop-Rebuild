@@ -87,6 +87,7 @@ function requireBranding() {
   const ui = branding.ui;
   for (const name of [
     "hideWindowsSandboxBanner",
+    "enablePermissionModeSelection",
     "hideApiKeyAuthMenuItem",
     "hideLogoutMenuItem",
     "hideModelReasoningEffort",
