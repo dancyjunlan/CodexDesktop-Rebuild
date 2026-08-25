@@ -1,10 +1,21 @@
 {
   "appName": "AIGeek",
+  "sidebarName": "艾极科技",
+  "homeGreeting": "艾极科技智能设计助手",
+  "icons": {
+    "webview": "resources/aigeek-mark.png",
+    "webviewSmall": "resources/aigeek-mark-256.png",
+    "webviewAnimation": "resources/aigeek-logo-shatter.gif",
+    "windows": "resources/forgecode.ico",
+    "macos": "resources/forgecode.icns",
+    "linux": "resources/forgecode.png",
+    "packager": "resources/forgecode"
+  },
   "packageName": "forgecode-desktop",
   "author": "AIGeek Studio",
   "description": "A focused desktop workspace for coding with AI.",
   "devAppName": "AIGeek (Dev)",
-  "windowsAppUserModelId": "studio.aigeek.desktop",
+  "windowsAppUserModelId": "studio.aigeek.desktop.v2",
   "windowsTrayGuid": "0f6c3f6f-6752-4cd3-a80b-641391a9fa70",
   "databaseFileName": "aigeek.db",
   "devDatabaseFileName": "aigeek-dev.db",

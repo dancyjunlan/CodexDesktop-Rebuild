@@ -1,6 +1,6 @@
 (() => {
   const appName = "__FORGECODE_NAME__";
-  const sidebarName = "艾极科技";
+  const sidebarName = "__FORGECODE_SIDEBAR_NAME__";
   const exactNames = new Set(["Codex", "OpenAI Codex", "Codex (Dev)"]);
   const hiddenWorkspaceNames = new Set(["ChatGPT Work"]);
   // React may recreate the selector after its label has already been branded.
@@ -14,7 +14,7 @@
     "What should we build?",
     "\u6211\u4eec\u8be5\u6784\u5efa\u4ec0\u4e48\uff1f",
   ]);
-  const homeGreeting = "\u827e\u6781\u79d1\u6280\u667a\u80fd\u8bbe\u8ba1\u52a9\u624b";
+  const homeGreeting = "__FORGECODE_HOME_GREETING__";
   const hiddenNavigationLabels = new Set([
     "Pull requests",
     "Scheduled",

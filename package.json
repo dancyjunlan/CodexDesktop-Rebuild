@@ -11,6 +11,7 @@
     "start": "node scripts/start-dev.js",
     "dev": "node scripts/start-dev.js",
     "seed:aigeek-home": "node scripts/seed-aigeek-home.js",
+    "brand:assets": "node scripts/generate-brand-assets.js",
     "patch": "node scripts/patch-all.js",
     "patch:win": "node scripts/patch-all.js win",
     "sync": "node scripts/sync-upstream.js",

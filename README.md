@@ -52,7 +52,8 @@ On Windows, sync also keeps the matching upstream Electron runtime under
 `src/win/runtime/`. It is required for the upstream native SQLite module and is
 selected automatically by `npm run dev`.
 
-The icon source is `resources/forgecode-mark.svg`. After changing it, regenerate
+Brand image sources and generated package icon paths are configured in
+`branding.json` under `icons`. After changing the webview icon paths, regenerate
 the package icon files with:
 
 ```bash

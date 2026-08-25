@@ -17,9 +17,9 @@ const config = JSON.parse(
   fs.readFileSync(path.join(PROJECT_ROOT, "branding.json"), "utf-8"),
 );
 const RESOURCE_DIR = path.join(PROJECT_ROOT, "resources");
-const MARK_SOURCE = path.join(RESOURCE_DIR, "aigeek-mark.png");
-const SHATTER_SOURCE = path.join(RESOURCE_DIR, "aigeek-logo-shatter.gif");
-const WINDOWS_ICON_SOURCE = path.join(RESOURCE_DIR, "forgecode.ico");
+const MARK_SOURCE = resolveConfiguredIcon("webview");
+const SHATTER_SOURCE = resolveConfiguredIcon("webviewAnimation");
+const WINDOWS_ICON_SOURCE = resolveConfiguredIcon("windows");
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
 const WINDOWS_RUNTIME_INI = path.join(SRC_DIR, "win", "owl-app.ini");
@@ -31,6 +31,19 @@ const PREVIOUS_DATABASE_FILE_NAME = "forgecode.db";
 const PREVIOUS_DEV_DATABASE_FILE_NAME = "forgecode-dev.db";
 const BLOCK_START = "<!-- FORGECODE_BRANDING_START -->";
 const BLOCK_END = "<!-- FORGECODE_BRANDING_END -->";
+
+function resolveConfiguredIcon(name) {
+  const configuredPath = config.icons?.[name];
+  if (typeof configuredPath !== "string" || configuredPath.length === 0) {
+    throw new Error(`branding.json: icons.${name} must be a non-empty path`);
+  }
+
+  const iconPath = path.resolve(PROJECT_ROOT, configuredPath);
+  if (!fs.existsSync(iconPath)) {
+    throw new Error(`branding.json: icons.${name} does not exist: ${configuredPath}`);
+  }
+  return iconPath;
+}
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -89,7 +102,9 @@ function patchWebview(platform) {
   fs.copyFileSync(STYLE_SOURCE, path.join(webviewDir, "forgecode-branding.css"));
   const script = fs
     .readFileSync(SCRIPT_SOURCE, "utf-8")
-    .replace("__FORGECODE_NAME__", config.appName);
+    .replace('"__FORGECODE_NAME__"', JSON.stringify(config.appName))
+    .replace('"__FORGECODE_SIDEBAR_NAME__"', JSON.stringify(config.sidebarName))
+    .replace('"__FORGECODE_HOME_GREETING__"', JSON.stringify(config.homeGreeting));
   writeIfChanged(path.join(webviewDir, "forgecode-branding.js"), script);
 
   return relPath(indexPath);
@@ -129,6 +144,7 @@ function patchMainProcess(platform) {
   const upstreamAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(i.i(Z))";
   const brandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`"
     + config.windowsAppUserModelId + ".dev`:`" + config.windowsAppUserModelId + "`)";
+  const previousBrandedAppUserModelId = "process.platform===`win32`&&a.app.setAppUserModelId(Z===`dev`?`studio.aigeek.desktop.dev`:`studio.aigeek.desktop`)";
   const upstreamWindowsTrayGuid = "case n.js.Prod:return`e5768d8b-6936-4f45-b1ad-4c5fb414cb35`";
   const brandedWindowsTrayGuid = "case n.js.Prod:return`" + config.windowsTrayGuid + "`";
   const brandedAppDataPath = "a.app.setPath(`appData`,o.join(a.app.getPath(`appData`),`..`,`" + config.appName + "`))";
@@ -158,6 +174,14 @@ function patchMainProcess(platform) {
       upstreamAppUserModelId,
       brandedAppUserModelId,
       "Windows AppUserModelID",
+      bootstrapPath,
+    );
+  } else if (bootstrap.includes(previousBrandedAppUserModelId)) {
+    bootstrap = replaceExact(
+      bootstrap,
+      previousBrandedAppUserModelId,
+      brandedAppUserModelId,
+      "previous Windows AppUserModelID",
       bootstrapPath,
     );
   } else if (!bootstrap.includes(brandedAppUserModelId)) {
@@ -383,6 +407,37 @@ function patchWebviewStartupLogo(platform) {
   return relPath(appInitialPath);
 }
 
+function patchDesktopNotificationReplyPlaceholder(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) => {
+    if (!/^app-initial-.*\.js$/.test(file)) return false;
+    const source = fs.readFileSync(path.join(assetsDir, file), "utf-8");
+    return source.includes("replyPlaceholder:`Reply to ChatGPT`")
+      || source.includes("replyPlaceholder:`Reply`");
+  });
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the desktop notification bundle`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  let source = fs.readFileSync(appInitialPath, "utf-8");
+  const upstream = "replyPlaceholder:`Reply to ChatGPT`";
+  const branded = "replyPlaceholder:`Reply`";
+  if (source.includes(upstream)) {
+    source = replaceExact(
+      source,
+      upstream,
+      branded,
+      "desktop notification reply placeholder",
+      appInitialPath,
+    );
+  } else if (!source.includes(branded)) {
+    throw new Error(`${relPath(appInitialPath)}: desktop notification reply placeholder was not recognized`);
+  }
+  writeIfChanged(appInitialPath, source);
+  return relPath(appInitialPath);
+}
+
 function patchLocaleBrandCopy(platform) {
   const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
   const localeName = fs.readdirSync(assetsDir).find((file) => {
@@ -470,10 +525,12 @@ async function main() {
       const ready = packageJson.productName === config.appName
         && index.includes(BLOCK_START)
         && bootstrap.includes(config.devAppName)
+        && bootstrap.includes(config.windowsAppUserModelId)
         && sqlite.includes(config.devDatabaseFileName)
         && sqlite.includes(".aigeek")
         && onboarding.includes("__forgecodeOnboardingSkipped")
         && appInitial.includes("data-forgecode-startup-icon")
+        && appInitial.includes("replyPlaceholder:`Reply`")
         && locale.includes("\"composer.placeholder.workWithChatGPT\":`使用 ForgeCode`");
       console.log(`  [${target}] ${ready && runtimeReady ? "ready" : "needs patch"}`);
       if (!ready || !runtimeReady) process.exitCode = 1;
@@ -489,6 +546,7 @@ async function main() {
     if (runtimeIconPath) console.log(`  [${target}] ${runtimeIconPath}`);
     console.log(`  [${target}] ${patchOnboarding(target)}`);
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
+    console.log(`  [${target}] ${patchDesktopNotificationReplyPlaceholder(target)}`);
     console.log(`  [${target}] ${patchLocaleBrandCopy(target)}`);
   }
 }

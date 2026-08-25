@@ -4,9 +4,10 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 
 const root = path.resolve(__dirname, "..");
+const branding = require(path.join(root, "branding.json"));
 const appDirectory = path.join(root, "out", "win", "AIGeek-win-x64");
 const outputDirectory = path.join(root, "out", "installer", "win-x64");
-const iconPath = path.join(root, "resources", "forgecode.ico");
+const iconPath = path.resolve(root, branding.icons.windows);
 const installerScript = path.join(root, "resources", "aigeek-installer.nsi");
 const defaultAuthPath = path.join(root, "auth.json");
 const defaultConfigPath = path.join(root, "config.toml");

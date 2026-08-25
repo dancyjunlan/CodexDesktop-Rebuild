@@ -1,13 +1,22 @@
 const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 const path = require("path");
 const fs = require("fs");
+const branding = require("./branding.json");
+
+function iconPath(name) {
+  const configuredPath = branding.icons?.[name];
+  if (typeof configuredPath !== "string" || configuredPath.length === 0) {
+    throw new Error(`branding.json: icons.${name} must be a non-empty path`);
+  }
+  return path.resolve(__dirname, configuredPath);
+}
 
 module.exports = {
   packagerConfig: {
     name: "AIGeek",
     executableName: "AIGeek",
     appBundleId: "studio.aigeek.desktop",
-    icon: "./resources/forgecode",
+    icon: iconPath("packager"),
     // Build mode is set by prepare-src.js via src/.build-mode marker file.
     // "upstream-asar": mac/win — we provide pre-built app.asar, forge skips ASAR packing.
     // "linux": forge packs ASAR from src/ content (needs electron-rebuild).
@@ -55,7 +64,7 @@ module.exports = {
   },
   rebuildConfig: {},
   makers: [
-    { name: "@electron-forge/maker-dmg", config: { format: "ULFO", icon: "./resources/forgecode.icns" } },
+    { name: "@electron-forge/maker-dmg", config: { format: "ULFO", icon: iconPath("macos") } },
     { name: "@electron-forge/maker-zip", platforms: ["darwin"] },
     {
       name: "@electron-forge/maker-squirrel",
@@ -63,17 +72,17 @@ module.exports = {
         name: "AIGeek",
         authors: "AIGeek Studio",
         description: "AIGeek desktop app",
-        setupIcon: "./resources/forgecode.ico",
+        setupIcon: iconPath("windows"),
       },
     },
     { name: "@electron-forge/maker-zip", platforms: ["win32"] },
     {
       name: "@electron-forge/maker-deb",
-      config: { options: { name: "aigeek", productName: "AIGeek", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "AIGeek", maintainer: "AIGeek Studio", icon: "./resources/forgecode.png" } },
+      config: { options: { name: "aigeek", productName: "AIGeek", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "AIGeek", maintainer: "AIGeek Studio", icon: iconPath("linux") } },
     },
     {
       name: "@electron-forge/maker-rpm",
-      config: { options: { name: "aigeek", productName: "AIGeek", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "AIGeek", license: "Apache-2.0", icon: "./resources/forgecode.png" } },
+      config: { options: { name: "aigeek", productName: "AIGeek", genericName: "AI Coding Assistant", categories: ["Development", "Utility"], bin: "AIGeek", license: "Apache-2.0", icon: iconPath("linux") } },
     },
     { name: "@electron-forge/maker-zip", platforms: ["linux"] },
   ],

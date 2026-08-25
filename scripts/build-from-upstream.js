@@ -18,6 +18,7 @@ const asar = require("@electron/asar");
 const { brandWindowsExecutable } = require("./windows-executable-branding");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
+const branding = require(path.join(PROJECT_ROOT, "branding.json"));
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
 const OUT_DIR = path.join(PROJECT_ROOT, "out");
 const WINDOWS_LAUNCHER_SOURCE = path.join(PROJECT_ROOT, "resources", "aigeek-launcher.cs");
@@ -346,7 +347,7 @@ async function buildWin(platform) {
   ]);
   console.log(`   [copy] completed ${copied} files`);
 
-  const iconPath = path.join(PROJECT_ROOT, "resources", "forgecode.ico");
+  const iconPath = path.resolve(PROJECT_ROOT, branding.icons.windows);
   const upstreamRuntimeExe = path.join(outApp, "ChatGPT.exe");
   const brandedRuntimeExe = path.join(outApp, "AIGeekHost.exe");
   patchWindowsRuntimeIdentity(resourcesDir);

@@ -3,9 +3,19 @@
 const fs = require("fs");
 const path = require("path");
 
-const output = path.join(__dirname, "..", "resources");
-const png512 = fs.readFileSync(path.join(output, "aigeek-mark.png"));
-const png256 = fs.readFileSync(path.join(output, "aigeek-mark-256.png"));
+const projectRoot = path.resolve(__dirname, "..");
+const branding = require(path.join(projectRoot, "branding.json"));
+
+function iconPath(name) {
+  const configuredPath = branding.icons?.[name];
+  if (typeof configuredPath !== "string" || configuredPath.length === 0) {
+    throw new Error(`branding.json: icons.${name} must be a non-empty path`);
+  }
+  return path.resolve(projectRoot, configuredPath);
+}
+
+const png512 = fs.readFileSync(iconPath("webview"));
+const png256 = fs.readFileSync(iconPath("webviewSmall"));
 
 function createIco(png) {
   const header = Buffer.alloc(6);
@@ -35,7 +45,7 @@ function createIcns(png) {
   return Buffer.concat([header, iconChunk]);
 }
 
-fs.copyFileSync(path.join(output, "aigeek-mark.png"), path.join(output, "forgecode.png"));
-fs.writeFileSync(path.join(output, "forgecode.ico"), createIco(png256));
-fs.writeFileSync(path.join(output, "forgecode.icns"), createIcns(png512));
+fs.copyFileSync(iconPath("webview"), iconPath("linux"));
+fs.writeFileSync(iconPath("windows"), createIco(png256));
+fs.writeFileSync(iconPath("macos"), createIcns(png512));
 console.log("[ok] generated AIGeek PNG, ICO, and ICNS assets");

@@ -34,6 +34,10 @@ Function .onInit
 legacy_shortcuts:
   Delete "$DESKTOP\Codex.lnk"
 done:
+  ; Remove shortcuts from the earlier studio-based package. They point at
+  ; the old gray ChatGPT host and keep confusing Explorer's app identity.
+  Delete "$SMPROGRAMS\AIGeek.lnk"
+  Delete "$SMPROGRAMS\AIGeek Studio\AIGeek.lnk"
 FunctionEnd
 
 Section "Install"
@@ -75,8 +79,21 @@ config_exists:
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\AIGeek" "NoRepair" 1
   CreateDirectory "$SMPROGRAMS\AIGeek"
-  CreateShortcut "$SMPROGRAMS\AIGeek\AIGeek.lnk" "$INSTDIR\AIGeek.exe"
-  CreateShortcut "$DESKTOP\AIGeek.lnk" "$INSTDIR\AIGeek.exe"
+  ; Create shortcuts through the branded launcher so the shell link carries
+  ; System.AppUserModel.ID=studio.aigeek.desktop.v2. Without this property,
+  ; Windows treats the pinned shortcut and the running host as separate apps.
+  nsExec::ExecToLog '"$INSTDIR\AIGeek.exe" --create-shortcuts "$SMPROGRAMS\AIGeek\AIGeek.lnk" "$INSTDIR\AIGeek.exe"'
+  Pop $0
+  StrCmp $0 0 shortcuts_created
+  MessageBox MB_ICONSTOP "AIGeek shortcuts could not be created (error $0)."
+  Abort
+shortcuts_created:
+  nsExec::ExecToLog '"$INSTDIR\AIGeek.exe" --create-shortcuts "$DESKTOP\AIGeek.lnk" "$INSTDIR\AIGeek.exe"'
+  Pop $0
+  StrCmp $0 0 desktop_shortcut_created
+  MessageBox MB_ICONSTOP "AIGeek desktop shortcut could not be created (error $0)."
+  Abort
+desktop_shortcut_created:
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 SectionEnd
 
