@@ -25,7 +25,7 @@
     "ink": "#17231f"
   },
   "ui": {
-    "hideWindowsSandboxBanner": true,
+    "hideWindowsSandboxBanner": false,
     "hideApiKeyAuthMenuItem": true,
     "hideLogoutMenuItem": true,
     "hideModelReasoningEffort": false,

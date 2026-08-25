@@ -737,8 +737,6 @@ function patchRendererProductMode(platform) {
 }
 
 function patchRendererWindowsSandboxBanner(platform) {
-  if (!config.ui.hideWindowsSandboxBanner) return null;
-
   const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
   const appInitialName = fs.readdirSync(assetsDir).find((file) =>
     /^app-initial-.*\.js$/.test(file),
@@ -752,10 +750,16 @@ function patchRendererWindowsSandboxBanner(platform) {
   const upstream = "u=!n&&i?(0,djs.jsx)(njs,{cwd:a===`/`||o?null:a,requirement:s,setShowWindowsSandboxBanner:c}):null";
   const marker = "forgecode-hide-windows-sandbox-banner";
   const branded = `u=!1/*${marker}*/`;
-  if (source.includes(upstream)) {
-    source = replaceExact(source, upstream, branded, "Windows sandbox status banner", appInitialPath);
-  } else if (!source.includes(marker)) {
-    throw new Error(`${relPath(appInitialPath)}: Windows sandbox status banner was not recognized`);
+  if (config.ui.hideWindowsSandboxBanner) {
+    if (source.includes(upstream)) {
+      source = replaceExact(source, upstream, branded, "Windows sandbox status banner", appInitialPath);
+    } else if (!source.includes(marker)) {
+      throw new Error(`${relPath(appInitialPath)}: Windows sandbox status banner was not recognized`);
+    }
+  } else if (source.includes(branded)) {
+    source = replaceExact(source, branded, upstream, "Windows sandbox status banner restoration", appInitialPath);
+  } else if (!source.includes(upstream)) {
+    throw new Error(`${relPath(appInitialPath)}: Windows sandbox status banner restoration was not recognized`);
   }
   writeIfChanged(appInitialPath, source);
   return relPath(appInitialPath);
