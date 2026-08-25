@@ -4,18 +4,21 @@
  * model ID and its reasoning-effort capabilities.
  *
  * The renderer receives every model advertised by the local app server. The
- * picker now derives a single option from the active config model and only
- * replaces its display name with "glm-5.2". Selecting it therefore continues
- * to submit the model from config.toml rather than a hard-coded display name.
+ * picker keeps every model advertised by the local app server, while replacing
+ * the active model's display name from branding.json. Selecting an option
+ * therefore submits the selected model instead of trapping the picker on the
+ * current config model.
  */
 const fs = require("fs");
 const path = require("path");
 const { relPath, SRC_DIR } = require("./patch-util");
+const { branding } = require("./branding-config");
 
 const MODEL_LIST_MARKER = ",b=v?.models;";
-const MODEL_LIST_REPLACEMENT =
+const MODEL_LIST_REPLACEMENT = `,b=v?.models?.map(e=>({...e,displayName:e.model===_?\`${branding.ui.modelDisplayName}\`:e.displayName,isDefault:e.model===_}));`;
+const PREVIOUS_MODEL_LIST_REPLACEMENT =
   ",b=v?.models?.filter(e=>e.model===_).map(e=>({...e,displayName:`glm-5.2`,isDefault:!0}));";
-const PATCHED_MODEL_LIST_MARKER = "displayName:`glm-5.2`,isDefault:!0";
+const PATCHED_MODEL_LIST_MARKER = "v?.models?.map(e=>({...e,displayName:e.model===_?";
 
 const POWER_FALLBACK_MARKER =
   "let i=Lms(Vms.filter(({reasoningEffort:e})=>!n||e!==`xhigh`),e);return i.length>=3?i:[]";
@@ -50,6 +53,7 @@ function findTargets(platform) {
       const source = fs.readFileSync(filePath, "utf8");
       if (
         source.includes(MODEL_LIST_MARKER)
+        || source.includes(PREVIOUS_MODEL_LIST_REPLACEMENT)
         || source.includes(POWER_FALLBACK_MARKER)
         || source.includes(PATCHED_MODEL_LIST_MARKER)
         || source.includes(PATCHED_POWER_FALLBACK_MARKER)
@@ -75,7 +79,9 @@ function main() {
   let total = 0;
   for (const target of targets) {
     const source = fs.readFileSync(target.path, "utf8");
-    const modelList = replaceOnce(source, MODEL_LIST_MARKER, MODEL_LIST_REPLACEMENT);
+    const modelList = source.includes(MODEL_LIST_MARKER)
+      ? replaceOnce(source, MODEL_LIST_MARKER, MODEL_LIST_REPLACEMENT)
+      : replaceOnce(source, PREVIOUS_MODEL_LIST_REPLACEMENT, MODEL_LIST_REPLACEMENT);
     const powerFallback = replaceOnce(
       modelList.code,
       POWER_FALLBACK_MARKER,

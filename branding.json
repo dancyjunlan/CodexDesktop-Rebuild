@@ -24,6 +24,35 @@
     "coral": "#ff7a59",
     "ink": "#17231f"
   },
+  "ui": {
+    "hideWindowsSandboxBanner": true,
+    "hideApiKeyAuthMenuItem": true,
+    "hideLogoutMenuItem": true,
+    "hideModelReasoningEffort": true,
+    "modelPickerLabel": "修改模型",
+    "modelDisplayName": "glm-5.2",
+    "hiddenWindowsSandboxLabels": [
+      "Finish Windows setup to continue",
+      "完成 Windows 设置以继续"
+    ],
+    "hiddenApiKeyAuthLabels": [
+      "Logged in with API key",
+      "已通过 API 密钥登录"
+    ],
+    "hiddenLogoutLabels": [
+      "Log out",
+      "退出登录"
+    ],
+    "hiddenModelReasoningEffortLabels": [
+      "Effort",
+      "Reasoning effort",
+      "推理强度"
+    ],
+    "modelPickerModelLabels": [
+      "Model",
+      "模型"
+    ]
+  },
   "devAppName": "IDP (Dev)",
   "homeDirectoryName": ".aigeek",
   "dataDirectoryName": "data",

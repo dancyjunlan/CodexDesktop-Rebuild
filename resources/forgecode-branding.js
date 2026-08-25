@@ -6,6 +6,18 @@
   const assetRevision = "__BRANDING_ASSET_REVISION__";
   const webviewAnimation = "__BRANDING_WEBVIEW_ANIMATION__";
   const exactNames = new Set(["Codex", "OpenAI Codex", "Codex (Dev)"]);
+  const ui = {
+    hideWindowsSandboxBanner: __FORGECODE_HIDE_WINDOWS_SANDBOX_BANNER__,
+    hideApiKeyAuthMenuItem: __FORGECODE_HIDE_API_KEY_AUTH_MENU_ITEM__,
+    hideLogoutMenuItem: __FORGECODE_HIDE_LOGOUT_MENU_ITEM__,
+    hideModelReasoningEffort: __FORGECODE_HIDE_MODEL_REASONING_EFFORT__,
+    modelPickerLabel: "__FORGECODE_MODEL_PICKER_LABEL__",
+    hiddenWindowsSandboxLabels: new Set(__FORGECODE_HIDDEN_WINDOWS_SANDBOX_LABELS__),
+    hiddenApiKeyAuthLabels: new Set(__FORGECODE_HIDDEN_API_KEY_AUTH_LABELS__),
+    hiddenLogoutLabels: new Set(__FORGECODE_HIDDEN_LOGOUT_LABELS__),
+    hiddenModelReasoningEffortLabels: new Set(__FORGECODE_HIDDEN_MODEL_REASONING_EFFORT_LABELS__),
+    modelPickerModelLabels: new Set(__FORGECODE_MODEL_PICKER_MODEL_LABELS__),
+  };
   const hiddenWorkspaceNames = new Set(["ChatGPT Work"]);
   // React may recreate the selector after its label has already been branded.
   // Match both states so it remains a fixed ForgeCode product label.
@@ -180,6 +192,67 @@
     if (target) target.setAttribute("data-aigeek-hide", kind);
   }
 
+  function hideLabeledSurface(element, kind) {
+    const control = element.closest("button, a, [role='button'], [role='menuitem'], [role='link']");
+    if (control) {
+      control.setAttribute("data-aigeek-hide", kind);
+      return;
+    }
+
+    let candidate = element;
+    for (let depth = 0; depth < 8 && candidate.parentElement; depth += 1) {
+      candidate = candidate.parentElement;
+      const rect = candidate.getBoundingClientRect();
+      const text = candidate.textContent?.trim() ?? "";
+      if (rect.width >= 360 && rect.height >= 24 && rect.height <= 180 && text.length <= 500) {
+        candidate.setAttribute("data-aigeek-hide", kind);
+        return;
+      }
+    }
+  }
+
+  function hideConfiguredSurfaces(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+
+    for (const node of nodes) {
+      const label = node.nodeValue.trim();
+      const element = node.parentElement;
+      if (!element) continue;
+
+      if (ui.hideWindowsSandboxBanner && ui.hiddenWindowsSandboxLabels.has(label)) {
+        hideLabeledSurface(element, "windows-sandbox");
+        continue;
+      }
+      if (ui.hideApiKeyAuthMenuItem && ui.hiddenApiKeyAuthLabels.has(label)) {
+        hideLabeledSurface(element, "api-key-auth");
+        continue;
+      }
+      if (ui.hideLogoutMenuItem && ui.hiddenLogoutLabels.has(label)) {
+        hideLabeledSurface(element, "logout");
+        continue;
+      }
+      if (ui.hideModelReasoningEffort && ui.hiddenModelReasoningEffortLabels.has(label)) {
+        hideLabeledSurface(element, "model-reasoning-effort");
+      }
+    }
+  }
+
+  function brandModelPickerLabel(root) {
+    if (!ui.modelPickerLabel) return;
+    for (const row of root.querySelectorAll("[data-model-picker-model-row]")) {
+      const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      for (const node of nodes) {
+        if (ui.modelPickerModelLabels.has(node.nodeValue.trim())) {
+          node.nodeValue = node.nodeValue.replace(node.nodeValue.trim(), ui.modelPickerLabel);
+        }
+      }
+    }
+  }
+
   function hideUnwantedSurfaces(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
@@ -206,6 +279,8 @@
     replaceOnboardingHeaderMark();
     replaceHomeBrandMark();
     hideUnwantedSurfaces(document.body);
+    hideConfiguredSurfaces(document.body);
+    brandModelPickerLabel(document.body);
   }
 
   function scheduleRefresh() {

@@ -107,7 +107,17 @@ function patchWebview(platform) {
     .replace('"__BRANDING_WEBVIEW_ICON__"', JSON.stringify(WEBVIEW_ICON_FILE_NAME))
     .replace('"__BRANDING_TITLEBAR_ICON__"', JSON.stringify(TITLEBAR_ICON_FILE_NAME))
     .replace('"__BRANDING_ASSET_REVISION__"', JSON.stringify(config.assetRevision))
-    .replace('"__BRANDING_WEBVIEW_ANIMATION__"', JSON.stringify(WEBVIEW_ANIMATION_FILE_NAME));
+    .replace('"__BRANDING_WEBVIEW_ANIMATION__"', JSON.stringify(WEBVIEW_ANIMATION_FILE_NAME))
+    .replace('__FORGECODE_HIDE_WINDOWS_SANDBOX_BANNER__', JSON.stringify(config.ui.hideWindowsSandboxBanner))
+    .replace('__FORGECODE_HIDE_API_KEY_AUTH_MENU_ITEM__', JSON.stringify(config.ui.hideApiKeyAuthMenuItem))
+    .replace('__FORGECODE_HIDE_LOGOUT_MENU_ITEM__', JSON.stringify(config.ui.hideLogoutMenuItem))
+    .replace('__FORGECODE_HIDE_MODEL_REASONING_EFFORT__', JSON.stringify(config.ui.hideModelReasoningEffort))
+    .replace('"__FORGECODE_MODEL_PICKER_LABEL__"', JSON.stringify(config.ui.modelPickerLabel))
+    .replace('__FORGECODE_HIDDEN_WINDOWS_SANDBOX_LABELS__', JSON.stringify(config.ui.hiddenWindowsSandboxLabels))
+    .replace('__FORGECODE_HIDDEN_API_KEY_AUTH_LABELS__', JSON.stringify(config.ui.hiddenApiKeyAuthLabels))
+    .replace('__FORGECODE_HIDDEN_LOGOUT_LABELS__', JSON.stringify(config.ui.hiddenLogoutLabels))
+    .replace('__FORGECODE_HIDDEN_MODEL_REASONING_EFFORT_LABELS__', JSON.stringify(config.ui.hiddenModelReasoningEffortLabels))
+    .replace('__FORGECODE_MODEL_PICKER_MODEL_LABELS__', JSON.stringify(config.ui.modelPickerModelLabels));
   writeIfChanged(path.join(webviewDir, "forgecode-branding.js"), script);
 
   return relPath(indexPath);
@@ -563,6 +573,107 @@ function patchRendererAppBrand(platform) {
   return relPath(appInitialPath);
 }
 
+function findRendererProductMode(source) {
+  const pattern = /function ([A-Za-z_$][\w$]*)\(\{configuredThreadDetailLevel:([A-Za-z_$][\w$]*),onboardingWorkMode:([A-Za-z_$][\w$]*),threadDetailLevel:([A-Za-z_$][\w$]*)\}\)\{return([^{}]+)\}/g;
+  const matches = [...source.matchAll(pattern)];
+  if (matches.length !== 1) return null;
+
+  const fixedMode = /^`(codex|work)`$/.exec(matches[0][5])?.[1] ?? null;
+  return { fixedMode, match: matches[0] };
+}
+
+function findRendererDetailMode(source) {
+  const constantsPattern = /([A-Za-z_$][\w$]*)=`STEPS_PROSE`,([A-Za-z_$][\w$]*)=`STEPS_COMMANDS`/g;
+  const constantsMatches = [...source.matchAll(constantsPattern)];
+  if (constantsMatches.length !== 1) return null;
+
+  const [, proseVariable, commandsVariable] = constantsMatches[0];
+  const fixedPattern = new RegExp(
+    `([A-Za-z_$][\\w$]*)=ja\\(Q,\\(\\)=>(${proseVariable}|${commandsVariable})\\)`,
+    "g",
+  );
+  const fixedMatches = [...source.matchAll(fixedPattern)];
+  if (fixedMatches.length === 1) {
+    return {
+      atomVariable: fixedMatches[0][1],
+      commandsVariable,
+      currentMode: fixedMatches[0][2] === commandsVariable ? "codex" : "work",
+      match: fixedMatches[0],
+      proseVariable,
+    };
+  }
+
+  const upstreamPattern = /([A-Za-z_$][\w$]*)=ja\(Q,\(\{get:[A-Za-z_$][\w$]*\}\)=>\{[^{}]*unsupported-auth[^{}]*\}\)/g;
+  const upstreamMatches = [...source.matchAll(upstreamPattern)];
+  if (upstreamMatches.length !== 1) return null;
+  return {
+    atomVariable: upstreamMatches[0][1],
+    commandsVariable,
+    currentMode: null,
+    match: upstreamMatches[0],
+    proseVariable,
+  };
+}
+
+function patchRendererProductMode(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) =>
+    /^app-initial-.*\.js$/.test(file),
+  );
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the renderer app bundle`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  let source = fs.readFileSync(appInitialPath, "utf-8");
+  const productMode = findRendererProductMode(source);
+  if (!productMode) {
+    throw new Error(`${relPath(appInitialPath)}: renderer product mode selector was not recognized`);
+  }
+
+  const [upstream, functionName, configuredLevel, onboardingMode, threadLevel] = productMode.match;
+  const branded = `function ${functionName}({configuredThreadDetailLevel:${configuredLevel},onboardingWorkMode:${onboardingMode},threadDetailLevel:${threadLevel}}){return\`${config.productMode}\`}`;
+  source = source.replace(upstream, branded);
+
+  const detailMode = findRendererDetailMode(source);
+  if (!detailMode) {
+    throw new Error(`${relPath(appInitialPath)}: renderer conversation detail mode was not recognized`);
+  }
+  const detailVariable = config.productMode === "codex"
+    ? detailMode.commandsVariable
+    : detailMode.proseVariable;
+  const brandedDetailMode = `${detailMode.atomVariable}=ja(Q,()=>${detailVariable})`;
+  source = source.replace(detailMode.match[0], brandedDetailMode);
+
+  writeIfChanged(appInitialPath, source);
+  return relPath(appInitialPath);
+}
+
+function patchRendererWindowsSandboxBanner(platform) {
+  if (!config.ui.hideWindowsSandboxBanner) return null;
+
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) =>
+    /^app-initial-.*\.js$/.test(file),
+  );
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the renderer app bundle`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  let source = fs.readFileSync(appInitialPath, "utf-8");
+  const upstream = "u=!n&&i?(0,djs.jsx)(njs,{cwd:a===`/`||o?null:a,requirement:s,setShowWindowsSandboxBanner:c}):null";
+  const marker = "forgecode-hide-windows-sandbox-banner";
+  const branded = `u=!1/*${marker}*/`;
+  if (source.includes(upstream)) {
+    source = replaceExact(source, upstream, branded, "Windows sandbox status banner", appInitialPath);
+  } else if (!source.includes(marker)) {
+    throw new Error(`${relPath(appInitialPath)}: Windows sandbox status banner was not recognized`);
+  }
+  writeIfChanged(appInitialPath, source);
+  return relPath(appInitialPath);
+}
+
 function patchWebviewStartupLogo(platform) {
   const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
   const appInitialName = fs.readdirSync(assetsDir).find((file) => {
@@ -749,19 +860,32 @@ async function main() {
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", appInitialName), "utf-8")
         : "";
       const rendererAppBrand = findRendererAppBrand(appInitial)?.[2] ?? null;
+      const rendererProductMode = findRendererProductMode(appInitial)?.fixedMode ?? null;
+      const rendererDetailMode = findRendererDetailMode(appInitial)?.currentMode ?? null;
+      const rendererWindowsSandboxBanner = appInitial.includes("forgecode-hide-windows-sandbox-banner");
       const locale = localeName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", localeName), "utf-8")
         : "";
+      const notificationHelperReady = !fs.existsSync(
+        path.join(SRC_DIR, "win", "runtime", NOTIFICATION_HELPER_EXECUTABLE_NAME),
+      ) || await windowsExecutableHasPrimaryIcon(
+        path.join(SRC_DIR, "win", "runtime", NOTIFICATION_HELPER_EXECUTABLE_NAME),
+        WINDOWS_ICON_SOURCE,
+      );
       const runtimeReady = target !== "win"
       || (fs.existsSync(WINDOWS_RUNTIME_INI)
           && fs.readFileSync(WINDOWS_RUNTIME_INI, "utf-8").includes(`UserDataDirectoryName=${WINDOWS_RUNTIME_USER_DATA_NAME}`)
           && await windowsExecutableHasPrimaryIcon(
             path.join(SRC_DIR, "win", "runtime", windowsBranding.executableName),
             WINDOWS_ICON_SOURCE,
-          ));
+          )
+          && notificationHelperReady);
       const ready = packageJson.productName === config.appName
         && packageJson.codexAppBrand === config.appBrand
         && rendererAppBrand === config.appBrand
+        && rendererProductMode === config.productMode
+        && rendererDetailMode === config.productMode
+        && (!config.ui.hideWindowsSandboxBanner || rendererWindowsSandboxBanner)
         && index.includes(BLOCK_START)
         && index.includes(`forgecode-branding.js?v=${BRAND_ASSET_REVISION}`)
         && brandingScript.includes(TITLEBAR_ICON_FILE_NAME)
@@ -796,6 +920,9 @@ async function main() {
     if (runtimeIconPath) console.log(`  [${target}] ${runtimeIconPath}`);
     console.log(`  [${target}] ${patchOnboarding(target)}`);
     console.log(`  [${target}] ${patchRendererAppBrand(target)}`);
+    console.log(`  [${target}] ${patchRendererProductMode(target)}`);
+    const sandboxBannerPath = patchRendererWindowsSandboxBanner(target);
+    if (sandboxBannerPath) console.log(`  [${target}] ${sandboxBannerPath}`);
     console.log(`  [${target}] ${patchAppBrandIcon(target)}`);
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
     console.log(`  [${target}] ${patchDesktopNotificationReplyPlaceholder(target)}`);

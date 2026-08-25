@@ -77,6 +77,31 @@ function requireBranding() {
   for (const name of ["mint", "coral", "ink"]) {
     requireString(branding.theme?.[name], `theme.${name}`);
   }
+  const ui = branding.ui;
+  for (const name of [
+    "hideWindowsSandboxBanner",
+    "hideApiKeyAuthMenuItem",
+    "hideLogoutMenuItem",
+    "hideModelReasoningEffort",
+  ]) {
+    if (typeof ui?.[name] !== "boolean") {
+      throw new Error(`branding.json: ui.${name} must be a boolean`);
+    }
+  }
+  for (const name of ["modelPickerLabel", "modelDisplayName"]) {
+    requireString(ui?.[name], `ui.${name}`);
+  }
+  for (const name of [
+    "hiddenWindowsSandboxLabels",
+    "hiddenApiKeyAuthLabels",
+    "hiddenLogoutLabels",
+    "hiddenModelReasoningEffortLabels",
+    "modelPickerModelLabels",
+  ]) {
+    if (!Array.isArray(ui?.[name]) || ui[name].some((value) => typeof value !== "string" || value.trim().length === 0)) {
+      throw new Error(`branding.json: ui.${name} must be an array of non-empty strings`);
+    }
+  }
   return branding;
 }
 
