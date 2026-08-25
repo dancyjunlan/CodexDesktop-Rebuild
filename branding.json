@@ -2,7 +2,7 @@
   "appName": "IDP",
   "appBrand": "codex",
   "productMode": "codex",
-  "assetRevision": "20260825-titlebar-idp-1",
+  "assetRevision": "20260825-titlebar-idp-2",
   "sidebarName": "IDP",
   "homeGreeting": "IDP智能设计助手",
   "icons": {
@@ -29,6 +29,11 @@
     "hideApiKeyAuthMenuItem": true,
     "hideLogoutMenuItem": true,
     "hideModelReasoningEffort": false,
+    "hideSidebarPetMenuItem": true,
+    "hideSidebarSettingsMenuItem": true,
+    "hideSidebarHelpButton": true,
+    "hideNativeHelpMenu": true,
+    "hideNativeSettingsMenuItem": true,
     "modelPickerLabel": "修改模型",
     "modelDisplayName": "glm-5.2",
     "hiddenWindowsSandboxLabels": [
@@ -42,6 +47,21 @@
     "hiddenLogoutLabels": [
       "Log out",
       "退出登录"
+    ],
+    "hiddenSidebarPetLabels": [
+      "Show pet",
+      "显示宠物",
+      "顯示寵物"
+    ],
+    "hiddenSidebarSettingsLabels": [
+      "Settings",
+      "设置",
+      "設定"
+    ],
+    "hiddenSidebarHelpButtonLabels": [
+      "Open help menu",
+      "打开帮助菜单",
+      "開啟說明選單"
     ],
     "hiddenModelReasoningEffortLabels": [
       "Effort",

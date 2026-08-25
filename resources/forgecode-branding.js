@@ -11,10 +11,16 @@
     hideApiKeyAuthMenuItem: __FORGECODE_HIDE_API_KEY_AUTH_MENU_ITEM__,
     hideLogoutMenuItem: __FORGECODE_HIDE_LOGOUT_MENU_ITEM__,
     hideModelReasoningEffort: __FORGECODE_HIDE_MODEL_REASONING_EFFORT__,
+    hideSidebarPetMenuItem: __FORGECODE_HIDE_SIDEBAR_PET_MENU_ITEM__,
+    hideSidebarSettingsMenuItem: __FORGECODE_HIDE_SIDEBAR_SETTINGS_MENU_ITEM__,
+    hideSidebarHelpButton: __FORGECODE_HIDE_SIDEBAR_HELP_BUTTON__,
     modelPickerLabel: "__FORGECODE_MODEL_PICKER_LABEL__",
     hiddenWindowsSandboxLabels: new Set(__FORGECODE_HIDDEN_WINDOWS_SANDBOX_LABELS__),
     hiddenApiKeyAuthLabels: new Set(__FORGECODE_HIDDEN_API_KEY_AUTH_LABELS__),
     hiddenLogoutLabels: new Set(__FORGECODE_HIDDEN_LOGOUT_LABELS__),
+    hiddenSidebarPetLabels: new Set(__FORGECODE_HIDDEN_SIDEBAR_PET_LABELS__),
+    hiddenSidebarSettingsLabels: new Set(__FORGECODE_HIDDEN_SIDEBAR_SETTINGS_LABELS__),
+    hiddenSidebarHelpButtonLabels: new Set(__FORGECODE_HIDDEN_SIDEBAR_HELP_BUTTON_LABELS__),
     hiddenModelReasoningEffortLabels: new Set(__FORGECODE_HIDDEN_MODEL_REASONING_EFFORT_LABELS__),
     modelPickerModelLabels: new Set(__FORGECODE_MODEL_PICKER_MODEL_LABELS__),
   };
@@ -272,6 +278,42 @@
 
   }
 
+  function isBottomSidebarSurface(element) {
+    const rect = element?.getBoundingClientRect?.();
+    return rect != null
+      && rect.width > 0
+      && rect.height > 0
+      && rect.left < 320
+      && rect.top > window.innerHeight - 220;
+  }
+
+  function hideBottomSidebarSurfaces(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+
+    for (const node of nodes) {
+      const label = node.nodeValue.trim();
+      const element = node.parentElement;
+      if (!element || !isBottomSidebarSurface(element)) continue;
+
+      if (ui.hideSidebarPetMenuItem && ui.hiddenSidebarPetLabels.has(label)) {
+        hideLabeledSurface(element, "sidebar-pet");
+      } else if (ui.hideSidebarSettingsMenuItem && ui.hiddenSidebarSettingsLabels.has(label)) {
+        hideLabeledSurface(element, "sidebar-settings");
+      }
+    }
+
+    if (!ui.hideSidebarHelpButton) return;
+    for (const element of root.querySelectorAll("[aria-label], [title]")) {
+      if (!isBottomSidebarSurface(element)) continue;
+      const labels = [element.getAttribute("aria-label"), element.getAttribute("title")];
+      if (labels.some((label) => ui.hiddenSidebarHelpButtonLabels.has(label))) {
+        hideUnwantedItem(element, "sidebar-help");
+      }
+    }
+  }
+
   function refresh() {
     scheduled = false;
     document.title = appName;
@@ -280,6 +322,7 @@
     replaceHomeBrandMark();
     hideUnwantedSurfaces(document.body);
     hideConfiguredSurfaces(document.body);
+    hideBottomSidebarSurfaces(document.body);
     brandModelPickerLabel(document.body);
   }
 

@@ -90,6 +90,11 @@ function requireBranding() {
     "hideApiKeyAuthMenuItem",
     "hideLogoutMenuItem",
     "hideModelReasoningEffort",
+    "hideSidebarPetMenuItem",
+    "hideSidebarSettingsMenuItem",
+    "hideSidebarHelpButton",
+    "hideNativeHelpMenu",
+    "hideNativeSettingsMenuItem",
   ]) {
     if (typeof ui?.[name] !== "boolean") {
       throw new Error(`branding.json: ui.${name} must be a boolean`);
@@ -102,6 +107,9 @@ function requireBranding() {
     "hiddenWindowsSandboxLabels",
     "hiddenApiKeyAuthLabels",
     "hiddenLogoutLabels",
+    "hiddenSidebarPetLabels",
+    "hiddenSidebarSettingsLabels",
+    "hiddenSidebarHelpButtonLabels",
     "hiddenModelReasoningEffortLabels",
     "modelPickerModelLabels",
   ]) {

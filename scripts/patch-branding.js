@@ -112,10 +112,16 @@ function patchWebview(platform) {
     .replace('__FORGECODE_HIDE_API_KEY_AUTH_MENU_ITEM__', JSON.stringify(config.ui.hideApiKeyAuthMenuItem))
     .replace('__FORGECODE_HIDE_LOGOUT_MENU_ITEM__', JSON.stringify(config.ui.hideLogoutMenuItem))
     .replace('__FORGECODE_HIDE_MODEL_REASONING_EFFORT__', JSON.stringify(config.ui.hideModelReasoningEffort))
+    .replace('__FORGECODE_HIDE_SIDEBAR_PET_MENU_ITEM__', JSON.stringify(config.ui.hideSidebarPetMenuItem))
+    .replace('__FORGECODE_HIDE_SIDEBAR_SETTINGS_MENU_ITEM__', JSON.stringify(config.ui.hideSidebarSettingsMenuItem))
+    .replace('__FORGECODE_HIDE_SIDEBAR_HELP_BUTTON__', JSON.stringify(config.ui.hideSidebarHelpButton))
     .replace('"__FORGECODE_MODEL_PICKER_LABEL__"', JSON.stringify(config.ui.modelPickerLabel))
     .replace('__FORGECODE_HIDDEN_WINDOWS_SANDBOX_LABELS__', JSON.stringify(config.ui.hiddenWindowsSandboxLabels))
     .replace('__FORGECODE_HIDDEN_API_KEY_AUTH_LABELS__', JSON.stringify(config.ui.hiddenApiKeyAuthLabels))
     .replace('__FORGECODE_HIDDEN_LOGOUT_LABELS__', JSON.stringify(config.ui.hiddenLogoutLabels))
+    .replace('__FORGECODE_HIDDEN_SIDEBAR_PET_LABELS__', JSON.stringify(config.ui.hiddenSidebarPetLabels))
+    .replace('__FORGECODE_HIDDEN_SIDEBAR_SETTINGS_LABELS__', JSON.stringify(config.ui.hiddenSidebarSettingsLabels))
+    .replace('__FORGECODE_HIDDEN_SIDEBAR_HELP_BUTTON_LABELS__', JSON.stringify(config.ui.hiddenSidebarHelpButtonLabels))
     .replace('__FORGECODE_HIDDEN_MODEL_REASONING_EFFORT_LABELS__', JSON.stringify(config.ui.hiddenModelReasoningEffortLabels))
     .replace('__FORGECODE_MODEL_PICKER_MODEL_LABELS__', JSON.stringify(config.ui.modelPickerModelLabels));
   writeIfChanged(path.join(webviewDir, "forgecode-branding.js"), script);
@@ -334,6 +340,39 @@ function patchMainProcess(platform) {
       "previous Windows window app details",
       mainPath,
     );
+  }
+
+  if (config.ui.hideNativeHelpMenu) {
+    const upstreamHelpMenuBuild = "Ut=l.Menu.buildFromTemplate(Ht)";
+    const brandedHelpMenuBuild = "Ht=Ht.filter(e=>e.id!==et.help),Ut=l.Menu.buildFromTemplate(Ht)";
+    if (main.includes(brandedHelpMenuBuild)) {
+      // The bundle has already been patched for the configured native menu.
+    } else if (main.includes(upstreamHelpMenuBuild)) {
+      main = replaceExact(
+        main,
+        upstreamHelpMenuBuild,
+        brandedHelpMenuBuild,
+        "native Help menu visibility",
+        mainPath,
+      );
+    } else if (!main.includes(brandedHelpMenuBuild)) {
+      throw new Error(`${relPath(mainPath)}: native Help menu build was not recognized`);
+    }
+  }
+
+  if (config.ui.hideNativeSettingsMenuItem) {
+    const upstreamSettingsMenuAppend = "else process.platform===`win32`&&Wt&&(Wt.append(new l.MenuItem({type:`separator`})),Wt.append(new l.MenuItem(F)))";
+    if (main.includes(upstreamSettingsMenuAppend)) {
+      main = replaceExact(
+        main,
+        upstreamSettingsMenuAppend,
+        "",
+        "native Settings menu visibility",
+        mainPath,
+      );
+    } else if (main.includes("Wt.append(new l.MenuItem(F))")) {
+      throw new Error(`${relPath(mainPath)}: native Settings menu append was not recognized`);
+    }
   }
   writeIfChanged(mainPath, main);
 
@@ -836,6 +875,13 @@ async function main() {
       const modelReasoningVisibilityReady = brandingScript.includes(
         `hideModelReasoningEffort: ${JSON.stringify(config.ui.hideModelReasoningEffort)}`,
       );
+      const sidebarVisibilityReady = brandingScript.includes(
+        `hideSidebarPetMenuItem: ${JSON.stringify(config.ui.hideSidebarPetMenuItem)}`,
+      ) && brandingScript.includes(
+        `hideSidebarSettingsMenuItem: ${JSON.stringify(config.ui.hideSidebarSettingsMenuItem)}`,
+      ) && brandingScript.includes(
+        `hideSidebarHelpButton: ${JSON.stringify(config.ui.hideSidebarHelpButton)}`,
+      );
       const buildDir = path.join(asarDir, ".vite", "build");
       const bootstrapName = fs.readdirSync(buildDir).find((file) => /^bootstrap-.*\.js$/.test(file));
       const sqliteName = fs.readdirSync(buildDir).find((file) => {
@@ -861,6 +907,10 @@ async function main() {
         return source.includes("windowIconPath") && source.includes("globalState");
       });
       const mainSource = mainName ? fs.readFileSync(path.join(buildDir, mainName), "utf-8") : "";
+      const nativeHelpVisibilityReady = !config.ui.hideNativeHelpMenu
+        || mainSource.includes("Ht=Ht.filter(e=>e.id!==et.help),Ut=l.Menu.buildFromTemplate(Ht)");
+      const nativeSettingsVisibilityReady = !config.ui.hideNativeSettingsMenuItem
+        || !mainSource.includes("Wt.append(new l.MenuItem(F))");
       const sqlite = sqliteName ? fs.readFileSync(path.join(buildDir, sqliteName), "utf-8") : "";
       const onboarding = onboardingName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", onboardingName), "utf-8")
@@ -900,6 +950,9 @@ async function main() {
         && brandingScript.includes(TITLEBAR_ICON_FILE_NAME)
         && brandingScript.includes(config.assetRevision)
         && modelReasoningVisibilityReady
+        && sidebarVisibilityReady
+        && nativeHelpVisibilityReady
+        && nativeSettingsVisibilityReady
         && fs.existsSync(path.join(asarDir, "webview", TITLEBAR_ICON_FILE_NAME))
         && bootstrap.includes(config.devAppName)
         && bootstrap.includes(windowsBranding.appUserModelId)
