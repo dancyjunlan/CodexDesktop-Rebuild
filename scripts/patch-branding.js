@@ -28,6 +28,7 @@ const BRAND_ASSET_REVISION = encodeURIComponent(config.assetRevision);
 const STYLE_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.css");
 const SCRIPT_SOURCE = path.join(RESOURCE_DIR, "forgecode-branding.js");
 const WINDOWS_RUNTIME_INI = path.join(SRC_DIR, "win", "owl-app.ini");
+const NOTIFICATION_HELPER_EXECUTABLE_NAME = "notification_helper.exe";
 // Owl builds the Chromium path below Roaming\\Codex\\web. Resolve back to
 // Roaming before appending the branded directory so it never shares Codex's
 // app-data root.
@@ -373,6 +374,7 @@ async function patchWindowsRuntimeIcon(platform) {
 
   const upstreamRuntimeExe = path.join(SRC_DIR, "win", "runtime", "ChatGPT.exe");
   const brandedRuntimeExe = path.join(SRC_DIR, "win", "runtime", windowsBranding.executableName);
+  const notificationHelperExe = path.join(SRC_DIR, "win", "runtime", NOTIFICATION_HELPER_EXECUTABLE_NAME);
   const runtimeResourcesDir = path.join(SRC_DIR, "win", "runtime", "resources");
   const packagedResourcesIcon = path.join(SRC_DIR, "win", windowsBranding.runtimeIconFileName);
   const runtimeResourcesIcon = path.join(runtimeResourcesDir, windowsBranding.runtimeIconFileName);
@@ -407,6 +409,14 @@ async function patchWindowsRuntimeIcon(platform) {
     CompanyName: config.author,
     OriginalFilename: windowsBranding.executableName,
   });
+  if (fs.existsSync(notificationHelperExe)) {
+    await brandWindowsExecutable(notificationHelperExe, WINDOWS_ICON_SOURCE, {
+      ProductName: config.appName,
+      FileDescription: `${config.appName} Notification Helper`,
+      CompanyName: config.author,
+      OriginalFilename: NOTIFICATION_HELPER_EXECUTABLE_NAME,
+    });
+  }
   return relPath(brandedRuntimeExe);
 }
 

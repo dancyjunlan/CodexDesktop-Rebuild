@@ -29,6 +29,7 @@ const OUT_DIR = path.join(PROJECT_ROOT, "out");
 const WINDOWS_LAUNCHER_SOURCE = path.join(PROJECT_ROOT, "resources", "aigeek-launcher.cs");
 const WINDOWS_CSC = path.join(process.env.WINDIR || "C:\\Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
 const windowsBranding = branding.windows;
+const NOTIFICATION_HELPER_EXECUTABLE_NAME = "notification_helper.exe";
 
 const TARGET_TRIPLE_MAP = {
   "mac-arm64": "aarch64-apple-darwin",
@@ -393,6 +394,7 @@ async function buildWin(platform) {
   const windowsIconPath = iconPath("windows");
   const upstreamRuntimeExe = path.join(outApp, "ChatGPT.exe");
   const brandedRuntimeExe = path.join(outApp, windowsBranding.hostExecutableName);
+  const notificationHelperExe = path.join(outApp, NOTIFICATION_HELPER_EXECUTABLE_NAME);
   patchWindowsRuntimeIdentity(resourcesDir);
   fs.copyFileSync(windowsIconPath, path.join(resourcesDir, windowsBranding.runtimeIconFileName));
   for (const trayIcon of [
@@ -412,6 +414,13 @@ async function buildWin(platform) {
   // it only accepts a directory name below Roaming\\Codex\\web.
   fs.copyFileSync(upstreamRuntimeExe, brandedRuntimeExe);
   await setWindowsExecutableIdentity(brandedRuntimeExe, windowsIconPath, windowsBranding.hostExecutableName);
+  if (fs.existsSync(notificationHelperExe)) {
+    await setWindowsExecutableIdentity(
+      notificationHelperExe,
+      windowsIconPath,
+      NOTIFICATION_HELPER_EXECUTABLE_NAME,
+    );
+  }
   await buildWindowsLauncher(path.join(outApp, windowsBranding.executableName), windowsIconPath);
   fs.rmSync(upstreamRuntimeExe, { force: true });
 
