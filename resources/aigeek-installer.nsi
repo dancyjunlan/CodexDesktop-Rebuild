@@ -31,6 +31,9 @@ ${Using:StrFunc} StrRep
 !ifndef TOOLS_DIRECTORY_NAME
 !error "TOOLS_DIRECTORY_NAME must be supplied by the branding build configuration"
 !endif
+!ifndef DATA
+!error "DATA must be supplied by the branding build configuration"
+!endif
 
 Name "${PRODUCT_NAME}"
 OutFile "${OUTFILE}"
@@ -110,6 +113,12 @@ payload_extracted:
   ; Seed the independent CLI home only once. Existing credentials and settings
   ; belong to the user and must survive installation and upgrades unchanged.
   CreateDirectory "$PROFILE\${HOME_DIRECTORY_NAME}"
+  ; Release bundled data without replacing any file already present in the
+  ; user's home. Missing files are still added during upgrades.
+  SetOverwrite off
+  SetOutPath "$PROFILE\${HOME_DIRECTORY_NAME}"
+  File /r "${DATA}\*.*"
+  SetOverwrite on
   SetOutPath "$PROFILE\${HOME_DIRECTORY_NAME}\${TOOLS_DIRECTORY_NAME}"
   File /r "${TOOLS}\*.*"
   IfFileExists "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json" auth_exists

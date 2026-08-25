@@ -16,6 +16,7 @@ function requireBranding() {
   for (const name of [
     "appName",
     "appBrand",
+    "productMode",
     "assetRevision",
     "sidebarName",
     "homeGreeting",
@@ -25,6 +26,7 @@ function requireBranding() {
     "genericName",
     "devAppName",
     "homeDirectoryName",
+    "dataDirectoryName",
     "databaseFileName",
     "devDatabaseFileName",
     "copyright",
@@ -34,8 +36,14 @@ function requireBranding() {
   if (!["codex", "chatgpt"].includes(branding.appBrand)) {
     throw new Error("branding.json: appBrand must be either codex or chatgpt");
   }
+  if (!["codex", "work"].includes(branding.productMode)) {
+    throw new Error("branding.json: productMode must be either codex or work");
+  }
   if (!branding.homeDirectoryName.startsWith(".")) {
     throw new Error("branding.json: homeDirectoryName must start with a dot");
+  }
+  if (path.isAbsolute(branding.dataDirectoryName) || branding.dataDirectoryName.includes("..")) {
+    throw new Error("branding.json: dataDirectoryName must be a relative directory name");
   }
   requireString(branding.toolsDirectoryName, "toolsDirectoryName");
   if (path.isAbsolute(branding.toolsDirectoryName) || branding.toolsDirectoryName.includes("..")) {

@@ -1,6 +1,7 @@
 {
   "appName": "IDP",
   "appBrand": "codex",
+  "productMode": "codex",
   "assetRevision": "20260825-titlebar-idp-1",
   "sidebarName": "IDP",
   "homeGreeting": "IDP智能设计助手",
@@ -24,7 +25,8 @@
     "ink": "#17231f"
   },
   "devAppName": "IDP (Dev)",
-  "homeDirectoryName": ".idp",
+  "homeDirectoryName": ".aigeek",
+  "dataDirectoryName": "data",
   "toolsDirectoryName": "tools",
   "bundledMcpServer": {
     "section": "s3d-local",

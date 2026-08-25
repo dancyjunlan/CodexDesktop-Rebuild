@@ -17,6 +17,7 @@ const windowsIconPath = iconPath("windows");
 const installerScript = path.join(root, "resources", "aigeek-installer.nsi");
 const defaultAuthPath = path.join(root, "auth.json");
 const defaultConfigPath = path.join(root, "config.toml");
+const dataPath = path.join(root, branding.dataDirectoryName);
 const toolsPath = path.join(root, branding.toolsDirectoryName);
 const packageVersion = require(path.join(root, "package.json")).version;
 const sevenZipDirectory = path.join(root, "node_modules", "electron-winstaller", "vendor");
@@ -41,6 +42,9 @@ if (!nsis) {
 if (!fs.existsSync(installerScript)) throw new Error("NSIS installer script is missing.");
 if (!fs.existsSync(defaultAuthPath) || !fs.existsSync(defaultConfigPath)) {
   throw new Error("Default auth.json and config.toml must exist in the project root.");
+}
+if (!fs.existsSync(dataPath) || !fs.statSync(dataPath).isDirectory()) {
+  throw new Error(`Bundled data directory is missing: ${branding.dataDirectoryName}`);
 }
 if (!fs.existsSync(toolsPath) || !fs.statSync(toolsPath).isDirectory()) {
   throw new Error(`Bundled tools directory is missing: ${branding.toolsDirectoryName}`);
@@ -155,6 +159,7 @@ try {
     `/DSEVENZIP_DLL=${sevenZipDll}`,
     `/DDEFAULT_AUTH=${defaultAuthPath}`,
     `/DDEFAULT_CONFIG=${preparedConfigPath}`,
+    `/DDATA=${dataPath}`,
     `/DTOOLS=${toolsPath}`,
     `/DTOOLS_DIRECTORY_NAME=${branding.toolsDirectoryName}`,
     `/DPRODUCT_VERSION=${packageVersion}`,
