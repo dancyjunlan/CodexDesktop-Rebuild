@@ -23,6 +23,7 @@ const sevenZipDirectory = path.join(root, "node_modules", "electron-winstaller",
 const sevenZip = path.join(sevenZipDirectory, "7z.exe");
 const sevenZipDll = path.join(sevenZipDirectory, "7z.dll");
 const compressionThreads = process.env.AIGEEK_BUILD_THREADS || "on";
+const showCompressionProgress = windowsBranding.showInstallerCompressionProgress;
 const HOME_TOOLS_TOKEN = "__BRANDING_HOME_TOOLS__";
 const nsis = [
   path.join(process.env.ProgramFiles || "C:\\Program Files", "NSIS", "makensis.exe"),
@@ -49,6 +50,9 @@ if (!fs.existsSync(sevenZip) || !fs.existsSync(sevenZipDll)) {
 }
 if (!/^(on|off|\d+)$/i.test(compressionThreads)) {
   throw new Error("AIGEEK_BUILD_THREADS must be 'on', 'off', or a positive number.");
+}
+if (typeof showCompressionProgress !== "boolean") {
+  throw new Error("branding.json: windows.showInstallerCompressionProgress must be a boolean");
 }
 
 fs.mkdirSync(outputDirectory, { recursive: true });
@@ -127,7 +131,7 @@ execFileSync(sevenZip, [
   "-mx=5",
   `-mmt=${compressionThreads}`,
   "-ms=off",
-  "-bsp0",
+  showCompressionProgress ? "-bsp1" : "-bsp0",
   payloadStagingPath,
   ".\\*",
 ], { cwd: appDirectory, stdio: "inherit" });

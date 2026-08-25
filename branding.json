@@ -39,6 +39,7 @@
     "runtimeIconFileName": "idp.ico",
     "runtimeUserDataDirectoryName": "IDP",
     "installerFileName": "IDP-Setup.exe",
+    "showInstallerCompressionProgress": true,
     "legacyProductName": "AIGeek"
   },
   "databaseFileName": "idp.db",
