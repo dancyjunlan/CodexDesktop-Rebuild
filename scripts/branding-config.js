@@ -95,6 +95,7 @@ function requireBranding() {
     "hideSidebarHelpButton",
     "hideNativeHelpMenu",
     "hideNativeSettingsMenuItem",
+    "hideNativeLogoutMenuItem",
   ]) {
     if (typeof ui?.[name] !== "boolean") {
       throw new Error(`branding.json: ui.${name} must be a boolean`);

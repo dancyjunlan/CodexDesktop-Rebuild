@@ -42,6 +42,8 @@ const BRANDED_NATIVE_HELP_MENU_BUILD = "Ut=(Ht=Ht.filter(e=>e.id!==et.help),l.Me
 const LEGACY_NATIVE_HELP_MENU_FILTER = "Ht=Ht.filter(e=>e.id!==et.help),";
 const LEGACY_NATIVE_HELP_MENU_BUILD = LEGACY_NATIVE_HELP_MENU_FILTER + UPSTREAM_NATIVE_HELP_MENU_BUILD;
 const STACKED_NATIVE_HELP_MENU_BUILD = LEGACY_NATIVE_HELP_MENU_FILTER + BRANDED_NATIVE_HELP_MENU_BUILD;
+const NATIVE_HELP_MENU_CLEANUP = "for(let e=Ut.items.length-1;e>=0;e--)Ut.items[e].role===`help`&&Ut.removeAt(e);";
+const NATIVE_LOGOUT_MENU_CLEANUP = "if(Gt){let e=Gt.items.findIndex(e=>e.label===se.label);if(e>=0){Gt.removeAt(e);if(e>0&&Gt.items[e-1].type===`separator`)Gt.removeAt(e-1)}}";
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -392,6 +394,19 @@ function patchMainProcess(platform) {
     } else if (main.includes("Wt.append(new l.MenuItem(F))")) {
       throw new Error(`${relPath(mainPath)}: native Settings menu append was not recognized`);
     }
+  }
+  const nativeMenuCleanup = [
+    config.ui.hideNativeHelpMenu ? NATIVE_HELP_MENU_CLEANUP : "",
+    config.ui.hideNativeLogoutMenuItem ? NATIVE_LOGOUT_MENU_CLEANUP : "",
+  ].join("");
+  if (nativeMenuCleanup && !main.includes(nativeMenuCleanup)) {
+    main = replaceExact(
+      main,
+      "l.Menu.setApplicationMenu(Ut)",
+      nativeMenuCleanup + "l.Menu.setApplicationMenu(Ut)",
+      "native menu cleanup",
+      mainPath,
+    );
   }
   writeIfChanged(mainPath, main);
 
@@ -931,9 +946,12 @@ async function main() {
           mainSource.includes(BRANDED_NATIVE_HELP_MENU_BUILD)
           && !mainSource.includes(LEGACY_NATIVE_HELP_MENU_BUILD)
           && !mainSource.includes(STACKED_NATIVE_HELP_MENU_BUILD)
+          && mainSource.includes(NATIVE_HELP_MENU_CLEANUP)
         );
       const nativeSettingsVisibilityReady = !config.ui.hideNativeSettingsMenuItem
         || !mainSource.includes("Wt.append(new l.MenuItem(F))");
+      const nativeLogoutVisibilityReady = !config.ui.hideNativeLogoutMenuItem
+        || mainSource.includes(NATIVE_LOGOUT_MENU_CLEANUP);
       const sqlite = sqliteName ? fs.readFileSync(path.join(buildDir, sqliteName), "utf-8") : "";
       const onboarding = onboardingName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", onboardingName), "utf-8")
@@ -976,6 +994,7 @@ async function main() {
         && sidebarVisibilityReady
         && nativeHelpVisibilityReady
         && nativeSettingsVisibilityReady
+        && nativeLogoutVisibilityReady
         && fs.existsSync(path.join(asarDir, "webview", TITLEBAR_ICON_FILE_NAME))
         && bootstrap.includes(config.devAppName)
         && bootstrap.includes(windowsBranding.appUserModelId)
