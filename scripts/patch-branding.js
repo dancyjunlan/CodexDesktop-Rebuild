@@ -438,6 +438,10 @@ function patchOnboarding(platform) {
 
   const onboardingPath = path.join(assetsDir, onboardingName);
   let onboarding = fs.readFileSync(onboardingPath, "utf-8");
+  onboarding = onboarding.replace(
+    /((?:defaultMessage|description):`(?:\\.|[^`])*`)/g,
+    (value) => value.replaceAll("ChatGPT", config.appName),
+  );
   const upstream = "):On=t[179];let kn;return t[180]!==pt";
   const branded = "):On=t[179];globalThis.__forgecodeOnboardingSkipped??(globalThis.__forgecodeOnboardingSkipped=!0,queueMicrotask(On));let kn;return t[180]!==pt";
 
@@ -454,6 +458,41 @@ function patchOnboarding(platform) {
   }
   writeIfChanged(onboardingPath, onboarding);
   return relPath(onboardingPath);
+}
+
+function patchAppBrandIcon(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) => {
+    if (!/^app-initial-.*\.js$/.test(file)) return false;
+    const source = fs.readFileSync(path.join(assetsDir, file), "utf-8");
+    return source.includes("function Mjo") || source.includes("src:Ojo");
+  });
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the shared app brand icon component`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  let source = fs.readFileSync(appInitialPath, "utf-8");
+  const upstream = "(0,Pjo.jsx)(Ajo,{\"aria-hidden\":`true`,className:r})";
+  const branded = "(0,Pjo.jsx)(`img`,{alt:``,\"aria-hidden\":!0,className:r,draggable:!1,src:`./"
+    + WEBVIEW_ICON_FILE_NAME + "`})";
+
+  if (source.includes(upstream)) {
+    source = replaceExact(source, upstream, branded, "ChatGPT app brand icon", appInitialPath);
+  } else if (!source.includes("src:`./" + WEBVIEW_ICON_FILE_NAME + "`")) {
+    const genericUpstream = /\(0,([A-Za-z_$][\w$]*)\.jsx\)\(([A-Za-z_$][\w$]*),\{\"aria-hidden\":`true`,className:r\}\)/g;
+    source = replaceSinglePattern(
+      source,
+      genericUpstream,
+      (_match, jsxNamespace) => "(0," + jsxNamespace + ".jsx)(`img`,{alt:``,\"aria-hidden\":!0,className:r,draggable:!1,src:`./"
+        + WEBVIEW_ICON_FILE_NAME + "`})",
+      "previous ChatGPT app brand icon",
+      appInitialPath,
+    );
+  }
+  source = source.replaceAll("src:Ojo", "src:`./" + WEBVIEW_ICON_FILE_NAME + "`");
+  writeIfChanged(appInitialPath, source);
+  return relPath(appInitialPath);
 }
 
 function patchWebviewStartupLogo(platform) {
@@ -552,6 +591,33 @@ function patchLocaleBrandCopy(platform) {
   return relPath(localePath);
 }
 
+function patchLocaleBrandNames(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const patched = [];
+
+  for (const file of fs.readdirSync(assetsDir).filter((name) => {
+    if (!/\.js$/.test(name)) return false;
+    const source = fs.readFileSync(path.join(assetsDir, name), "utf-8");
+    return source.includes('"CopyButton.copyTooltip":');
+  })) {
+    const filePath = path.join(assetsDir, file);
+    const source = fs.readFileSync(filePath, "utf-8");
+    // Locale bundles store translated values as object values after a colon.
+    // Restrict replacement to those values so message IDs such as
+    // composer.placeholder.workWithChatGPT remain compatible with the app.
+    const next = source.replace(
+      /(:`(?:\\.|[^`])*`)/g,
+      (value) => value.replaceAll("ChatGPT", config.appName),
+    );
+    if (next !== source) {
+      writeIfChanged(filePath, next);
+      patched.push(relPath(filePath));
+    }
+  }
+
+  return patched;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const isCheck = args.includes("--check");
@@ -627,7 +693,9 @@ async function main() {
         && sqlite.includes(config.devDatabaseFileName)
         && sqlite.includes(config.homeDirectoryName)
         && onboarding.includes("__forgecodeOnboardingSkipped")
+        && onboarding.includes("Customize " + config.appName)
         && appInitial.includes("data-forgecode-startup-icon")
+        && appInitial.includes("src:`./" + WEBVIEW_ICON_FILE_NAME + "`")
         && appInitial.includes("replyPlaceholder:`Reply`")
         && locale.includes("\"composer.placeholder.workWithChatGPT\":`使用 " + config.appName + "`");
       console.log(`  [${target}] ${ready && runtimeReady ? "ready" : "needs patch"}`);
@@ -643,9 +711,13 @@ async function main() {
     const runtimeIconPath = await patchWindowsRuntimeIcon(target);
     if (runtimeIconPath) console.log(`  [${target}] ${runtimeIconPath}`);
     console.log(`  [${target}] ${patchOnboarding(target)}`);
+    console.log(`  [${target}] ${patchAppBrandIcon(target)}`);
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
     console.log(`  [${target}] ${patchDesktopNotificationReplyPlaceholder(target)}`);
     console.log(`  [${target}] ${patchLocaleBrandCopy(target)}`);
+    for (const filePath of patchLocaleBrandNames(target)) {
+      console.log(`  [${target}] ${filePath}`);
+    }
   }
 }
 
