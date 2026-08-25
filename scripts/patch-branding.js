@@ -37,6 +37,11 @@ const PREVIOUS_DATABASE_FILE_NAME = "forgecode.db";
 const PREVIOUS_DEV_DATABASE_FILE_NAME = "forgecode-dev.db";
 const BLOCK_START = "<!-- FORGECODE_BRANDING_START -->";
 const BLOCK_END = "<!-- FORGECODE_BRANDING_END -->";
+const UPSTREAM_NATIVE_HELP_MENU_BUILD = "Ut=l.Menu.buildFromTemplate(Ht)";
+const BRANDED_NATIVE_HELP_MENU_BUILD = "Ut=(Ht=Ht.filter(e=>e.id!==et.help),l.Menu.buildFromTemplate(Ht))";
+const LEGACY_NATIVE_HELP_MENU_FILTER = "Ht=Ht.filter(e=>e.id!==et.help),";
+const LEGACY_NATIVE_HELP_MENU_BUILD = LEGACY_NATIVE_HELP_MENU_FILTER + UPSTREAM_NATIVE_HELP_MENU_BUILD;
+const STACKED_NATIVE_HELP_MENU_BUILD = LEGACY_NATIVE_HELP_MENU_FILTER + BRANDED_NATIVE_HELP_MENU_BUILD;
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -343,19 +348,33 @@ function patchMainProcess(platform) {
   }
 
   if (config.ui.hideNativeHelpMenu) {
-    const upstreamHelpMenuBuild = "Ut=l.Menu.buildFromTemplate(Ht)";
-    const brandedHelpMenuBuild = "Ut=(Ht=Ht.filter(e=>e.id!==et.help),l.Menu.buildFromTemplate(Ht))";
-    if (main.includes(brandedHelpMenuBuild)) {
-      // The bundle has already been patched for the configured native menu.
-    } else if (main.includes(upstreamHelpMenuBuild)) {
+    if (main.includes(STACKED_NATIVE_HELP_MENU_BUILD)) {
       main = replaceExact(
         main,
-        upstreamHelpMenuBuild,
-        brandedHelpMenuBuild,
+        STACKED_NATIVE_HELP_MENU_BUILD,
+        BRANDED_NATIVE_HELP_MENU_BUILD,
+        "stacked native Help menu visibility",
+        mainPath,
+      );
+    } else if (main.includes(LEGACY_NATIVE_HELP_MENU_BUILD)) {
+      main = replaceExact(
+        main,
+        LEGACY_NATIVE_HELP_MENU_BUILD,
+        BRANDED_NATIVE_HELP_MENU_BUILD,
+        "legacy native Help menu visibility",
+        mainPath,
+      );
+    } else if (main.includes(BRANDED_NATIVE_HELP_MENU_BUILD)) {
+      // The bundle has already been patched for the configured native menu.
+    } else if (main.includes(UPSTREAM_NATIVE_HELP_MENU_BUILD)) {
+      main = replaceExact(
+        main,
+        UPSTREAM_NATIVE_HELP_MENU_BUILD,
+        BRANDED_NATIVE_HELP_MENU_BUILD,
         "native Help menu visibility",
         mainPath,
       );
-    } else if (!main.includes(brandedHelpMenuBuild)) {
+    } else {
       throw new Error(`${relPath(mainPath)}: native Help menu build was not recognized`);
     }
   }
@@ -908,7 +927,11 @@ async function main() {
       });
       const mainSource = mainName ? fs.readFileSync(path.join(buildDir, mainName), "utf-8") : "";
       const nativeHelpVisibilityReady = !config.ui.hideNativeHelpMenu
-        || mainSource.includes("Ut=(Ht=Ht.filter(e=>e.id!==et.help),l.Menu.buildFromTemplate(Ht))");
+        || (
+          mainSource.includes(BRANDED_NATIVE_HELP_MENU_BUILD)
+          && !mainSource.includes(LEGACY_NATIVE_HELP_MENU_BUILD)
+          && !mainSource.includes(STACKED_NATIVE_HELP_MENU_BUILD)
+        );
       const nativeSettingsVisibilityReady = !config.ui.hideNativeSettingsMenuItem
         || !mainSource.includes("Wt.append(new l.MenuItem(F))");
       const sqlite = sqliteName ? fs.readFileSync(path.join(buildDir, sqliteName), "utf-8") : "";
