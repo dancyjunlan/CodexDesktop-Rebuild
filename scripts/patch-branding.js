@@ -55,6 +55,7 @@ const FULL_ACCESS_APP_NAME_MARKER = "forgecode-full-access-app-name";
 const FULL_ACCESS_RISK_DESCRIPTION_UPSTREAM = "let N;t[37]!==l||t[38]!==M?(N=(0,G2.jsx)($L,{className:`text-token-description-foreground`,children:(0,G2.jsx)(`p`,{className:`text-pretty`,children:(0,G2.jsx)(Z,{id:`composer.mode.agentMode.fullAccessConfirm.riskDescriptionByModel`,defaultMessage:`This comes with risks like loss or exposure of sensitive data and prompt injection. {isCyberModel, select, true {We strongly recommend selecting \"Approve for me\" instead, and customizing the reviewer policy for your use case.} other {You can turn this off.}} <link>Learn more</link>`,description:`Risk text in the full-access confirmation dialog; cybersecurity models recommend the safer Approve for me permission mode and customizing its reviewer policy instead of explaining that full access can be turned off`,values:{isCyberModel:l,link:M}})})}),t[37]=l,t[38]=M,t[39]=N):N=t[39];let P;";
 const FULL_ACCESS_RISK_DESCRIPTION_BRANDED = `let N=null/*${FULL_ACCESS_RISK_DESCRIPTION_MARKER}*/;let P;`;
 const FULL_ACCESS_WARNING_DESCRIPTION_UPSTREAM = "defaultMessage:`Codex will be able to run commands, use the internet, and create and edit files anywhere on this computer without your permission. This includes but is not limited to:`";
+const FULL_ACCESS_WARNING_LOCALE_KEY = '"composer.fullAccessWarning.descriptionWithLearnMore":`';
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -1022,6 +1023,30 @@ function patchLocaleBrandCopy(platform) {
   return relPath(localePath);
 }
 
+function patchLocaleFullAccessWarning(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const patched = [];
+
+  for (const file of fs.readdirSync(assetsDir).filter((name) => name.endsWith(".js"))) {
+    const filePath = path.join(assetsDir, file);
+    const source = fs.readFileSync(filePath, "utf-8");
+    if (!source.includes(FULL_ACCESS_WARNING_LOCALE_KEY)) continue;
+
+    const next = config.ui.hideFullAccessWarningLearnMore
+      ? source.replace(
+        /("composer\.fullAccessWarning\.descriptionWithLearnMore":`(?:\\.|[^`])*?)(<link>[^<]*<\/link>[^`]*?)(`)/g,
+        "$1$3",
+      )
+      : source;
+    if (next !== source) {
+      writeIfChanged(filePath, next);
+      patched.push(relPath(filePath));
+    }
+  }
+
+  return patched;
+}
+
 function patchLocaleBrandNames(platform) {
   const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
   const patched = [];
@@ -1225,6 +1250,9 @@ async function main() {
     console.log(`  [${target}] ${patchWebviewStartupLogo(target)}`);
     console.log(`  [${target}] ${patchDesktopNotificationReplyPlaceholder(target)}`);
     console.log(`  [${target}] ${patchLocaleBrandCopy(target)}`);
+    for (const filePath of patchLocaleFullAccessWarning(target)) {
+      console.log(`  [${target}] ${filePath}`);
+    }
     for (const filePath of patchLocaleBrandNames(target)) {
       console.log(`  [${target}] ${filePath}`);
     }

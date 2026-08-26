@@ -29,6 +29,7 @@
     "enablePermissionModeSelection": true,
     "hidePermissionModeHeader": true,
     "hideFullAccessRiskDescription": true,
+    "hideFullAccessWarningLearnMore": true,
     "hideApiKeyAuthMenuItem": true,
     "hideLogoutMenuItem": true,
     "hideModelReasoningEffort": false,

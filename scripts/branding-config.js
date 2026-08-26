@@ -90,6 +90,7 @@ function requireBranding() {
     "enablePermissionModeSelection",
     "hidePermissionModeHeader",
     "hideFullAccessRiskDescription",
+    "hideFullAccessWarningLearnMore",
     "hideApiKeyAuthMenuItem",
     "hideLogoutMenuItem",
     "hideModelReasoningEffort",
