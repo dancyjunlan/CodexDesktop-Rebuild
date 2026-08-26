@@ -56,6 +56,7 @@ const FULL_ACCESS_RISK_DESCRIPTION_UPSTREAM = "let N;t[37]!==l||t[38]!==M?(N=(0,
 const FULL_ACCESS_RISK_DESCRIPTION_BRANDED = `let N=null/*${FULL_ACCESS_RISK_DESCRIPTION_MARKER}*/;let P;`;
 const FULL_ACCESS_WARNING_DESCRIPTION_UPSTREAM = "defaultMessage:`Codex will be able to run commands, use the internet, and create and edit files anywhere on this computer without your permission. This includes but is not limited to:`";
 const FULL_ACCESS_WARNING_LOCALE_KEY = '"composer.fullAccessWarning.descriptionWithLearnMore":`';
+const PROJECT_SOURCE_EMPTY_CODEX_MESSAGE_ID = "projectSetup.createLocalProject.sourcesEmptyCodex";
 
 function getPlatforms(platform) {
   if (platform) return [platform];
@@ -670,6 +671,28 @@ function patchRendererAppBrand(platform) {
   return relPath(appInitialPath);
 }
 
+function patchRendererProjectSourceBrandName(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) =>
+    /^app-initial-.*\.js$/.test(file),
+  );
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the renderer app bundle`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  const source = fs.readFileSync(appInitialPath, "utf-8");
+  const next = replaceSinglePattern(
+    source,
+    /(id:`projectSetup\.createLocalProject\.sourcesEmptyCodex`,defaultMessage:`Add folders )[^`]+( can read and edit`,description:`Empty state copy for the local project source folder picker in Codex mode`)/g,
+    (_match, prefix, suffix) => `${prefix}${config.appName}${suffix}`,
+    "Codex-mode project source folder brand name",
+    appInitialPath,
+  );
+  writeIfChanged(appInitialPath, next);
+  return relPath(appInitialPath);
+}
+
 function findRendererProductMode(source) {
   const pattern = /function ([A-Za-z_$][\w$]*)\(\{configuredThreadDetailLevel:([A-Za-z_$][\w$]*),onboardingWorkMode:([A-Za-z_$][\w$]*),threadDetailLevel:([A-Za-z_$][\w$]*)\}\)\{return([^{}]+)\}/g;
   const matches = [...source.matchAll(pattern)];
@@ -1068,6 +1091,9 @@ function patchLocaleBrandNames(platform) {
       /(\"electron\.onboarding\.welcomeV2\.[^\"]+\":`(?:\\.|[^`])*`)/g,
       (value) => value.replaceAll("Codex", config.appName),
     ).replace(
+      /(\"projectSetup\.createLocalProject\.sourcesEmptyCodex\":`(?:\\.|[^`])*?)Codex/g,
+      (_match, prefix) => `${prefix}${config.appName}`,
+    ).replace(
       /(\"composer\.mode\.agentMode\.(?:fullAccessConfirm\.warningDescription|ultraFullAccessConfirm\.(?:description|noFallbackDescription))\.codeMode\":`[^`]*?)Codex/g,
       `$1${config.appName}`,
     );
@@ -1174,9 +1200,15 @@ async function main() {
       const rendererPermissionModeHeader = appInitial.includes(PERMISSION_MODE_HEADER_MARKER);
       const rendererFullAccessRiskDescription = appInitial.includes(FULL_ACCESS_RISK_DESCRIPTION_MARKER);
       const rendererFullAccessAppName = appInitial.includes(FULL_ACCESS_APP_NAME_MARKER);
+      const rendererProjectSourceBrandName = appInitial.includes(
+        `id:\`${PROJECT_SOURCE_EMPTY_CODEX_MESSAGE_ID}\`,defaultMessage:\`Add folders ${config.appName} can read and edit\``,
+      );
       const locale = localeName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", localeName), "utf-8")
         : "";
+      const localeProjectSourceBrandName = locale.includes(
+        `\"${PROJECT_SOURCE_EMPTY_CODEX_MESSAGE_ID}\":\`添加 ${config.appName} 可读取和编辑的文件夹\``,
+      );
       const notificationHelperReady = !fs.existsSync(
         path.join(SRC_DIR, "win", "runtime", NOTIFICATION_HELPER_EXECUTABLE_NAME),
       ) || await windowsExecutableHasPrimaryIcon(
@@ -1201,6 +1233,7 @@ async function main() {
         && rendererPermissionModeHeader === config.ui.hidePermissionModeHeader
         && rendererFullAccessRiskDescription === config.ui.hideFullAccessRiskDescription
         && rendererFullAccessAppName
+        && rendererProjectSourceBrandName
         && index.includes(BLOCK_START)
         && index.includes(`forgecode-branding.js?v=${BRAND_ASSET_REVISION}`)
         && brandingScript.includes(TITLEBAR_ICON_FILE_NAME)
@@ -1226,7 +1259,8 @@ async function main() {
         && appInitial.includes("data-forgecode-startup-icon")
         && appInitial.includes("src:`./" + WEBVIEW_ICON_FILE_NAME + "`")
         && appInitial.includes("replyPlaceholder:`Reply`")
-        && locale.includes("\"composer.placeholder.workWithChatGPT\":`使用 " + config.appName + "`");
+        && locale.includes("\"composer.placeholder.workWithChatGPT\":`使用 " + config.appName + "`")
+        && localeProjectSourceBrandName;
       console.log(`  [${target}] ${ready && runtimeReady ? "ready" : "needs patch"}`);
       if (!ready || !runtimeReady) process.exitCode = 1;
       continue;
@@ -1241,6 +1275,7 @@ async function main() {
     if (runtimeIconPath) console.log(`  [${target}] ${runtimeIconPath}`);
     console.log(`  [${target}] ${patchOnboarding(target)}`);
     console.log(`  [${target}] ${patchRendererAppBrand(target)}`);
+    console.log(`  [${target}] ${patchRendererProjectSourceBrandName(target)}`);
     console.log(`  [${target}] ${patchRendererProductMode(target)}`);
     const sandboxBannerPath = patchRendererWindowsSandboxBanner(target);
     if (sandboxBannerPath) console.log(`  [${target}] ${sandboxBannerPath}`);
