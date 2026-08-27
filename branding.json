@@ -2,7 +2,7 @@
   "appName": "IDP",
   "appBrand": "codex",
   "productMode": "codex",
-  "assetRevision": "20260825-titlebar-idp-3",
+  "assetRevision": "20260827-onboarding-skip-1",
   "sidebarName": "IDP",
   "homeGreeting": "IDP智能设计助手",
   "icons": {
@@ -39,6 +39,7 @@
     "hideNativeHelpMenu": true,
     "hideNativeSettingsMenuItem": true,
     "hideNativeLogoutMenuItem": true,
+    "skipOnboarding": true,
     "modelPickerLabel": "修改模型",
     "modelDisplayName": "glm-5.2",
     "hiddenWindowsSandboxLabels": [

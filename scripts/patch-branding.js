@@ -46,6 +46,7 @@ const NATIVE_HELP_MENU_CLEANUP = "for(let e=Ut.items.length-1;e>=0;e--)Ut.items[
 const NATIVE_LOGOUT_MENU_CLEANUP = "if(Gt){let e=Gt.items.findIndex(e=>e.label===se.label);if(e>=0){Gt.removeAt(e);if(e>0&&Gt.items[e-1].type===`separator`)Gt.removeAt(e-1)}}";
 const UPSTREAM_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem(se))";
 const BRANDED_NATIVE_LOGOUT_MENU_APPEND = "Gt.append(new l.MenuItem({...se,visible:!1}))";
+const ONBOARDING_OVERRIDE_RUNTIME_MARKER = "forgecode-skip-onboarding";
 const PERMISSION_MODE_SELECTION_MARKER = "forgecode-enable-permission-mode-selection";
 const PERMISSION_MODE_HEADER_MARKER = "forgecode-hide-permission-mode-header";
 const PERMISSION_MODE_HEADER_UPSTREAM = "ot=(0,K2.jsx)(zH.Title,{children:(0,K2.jsxs)(`div`,{className:`flex w-full min-w-0 items-start gap-4`,children:[at,(0,K2.jsx)(`button`,{type:`button`,className:`shrink-0 cursor-interaction underline underline-offset-2 hover:text-token-description-foreground`,onClick:_Us,children:(0,K2.jsx)(Z,{defaultMessage:`Learn more`,description:`Label on a button that opens the docs page for Codex action permissions and escalation.`,id:`composer.permissionsDropdown.learnMore`})})]})})";
@@ -595,7 +596,7 @@ function patchOnboarding(platform) {
   const upstream = "):On=t[179];let kn;return t[180]!==pt";
   const branded = "):On=t[179];globalThis.__forgecodeOnboardingSkipped??(globalThis.__forgecodeOnboardingSkipped=!0,queueMicrotask(On));let kn;return t[180]!==pt";
 
-  if (onboarding.includes(upstream)) {
+  if (config.ui.skipOnboarding && onboarding.includes(upstream)) {
     onboarding = replaceExact(
       onboarding,
       upstream,
@@ -603,11 +604,97 @@ function patchOnboarding(platform) {
       "onboarding skip hook",
       onboardingPath,
     );
-  } else if (!onboarding.includes("__forgecodeOnboardingSkipped")) {
+  } else if (config.ui.skipOnboarding && !onboarding.includes("__forgecodeOnboardingSkipped")) {
     throw new Error(`${relPath(onboardingPath)}: onboarding skip hook was not recognized`);
+  } else if (!config.ui.skipOnboarding && onboarding.includes(branded)) {
+    onboarding = replaceExact(
+      onboarding,
+      branded,
+      upstream,
+      "onboarding skip hook",
+      onboardingPath,
+    );
   }
   writeIfChanged(onboardingPath, onboarding);
   return relPath(onboardingPath);
+}
+
+function patchRendererOnboardingOverride(platform) {
+  const assetsDir = path.join(SRC_DIR, platform, "_asar", "webview", "assets");
+  const appInitialName = fs.readdirSync(assetsDir).find((file) =>
+    /^app-initial-.*\.js$/.test(file),
+  );
+  if (!appInitialName) {
+    throw new Error(`${platform}: could not locate the renderer app bundle`);
+  }
+
+  const appInitialPath = path.join(assetsDir, appInitialName);
+  let source = fs.readFileSync(appInitialPath, "utf-8");
+  const atomMatches = [
+    ...source.matchAll(/([A-Za-z_$][\w$]*)=bh\(`electron:onboarding-override`,`(?:auto|app)`\)/g),
+  ];
+  if (atomMatches.length !== 1) {
+    throw new Error(`${relPath(appInitialPath)}: onboarding override atom was not recognized`);
+  }
+  const atomVariable = atomMatches[0][1];
+  const atomSource = atomMatches[0][0];
+  const atomDefault = atomSource.endsWith("`app`)") ? "app" : "auto";
+  const runtimeMatches = [
+    ...source.matchAll(new RegExp(`([A-Za-z_$][\\w$]*)=hh\\(${atomVariable}\\)`, "g")),
+  ];
+  if (runtimeMatches.length !== 1 && !source.includes(ONBOARDING_OVERRIDE_RUNTIME_MARKER)) {
+    throw new Error(`${relPath(appInitialPath)}: onboarding runtime override was not recognized`);
+  }
+
+  if (config.ui.skipOnboarding) {
+    if (atomDefault === "auto") {
+      source = replaceExact(
+        source,
+        atomSource,
+        `${atomVariable}=bh(\`electron:onboarding-override\`,\`app\`)`,
+        "onboarding override default",
+        appInitialPath,
+      );
+    }
+    if (runtimeMatches.length === 1) {
+      const runtimeSource = runtimeMatches[0][0];
+      const runtimeVariable = runtimeMatches[0][1];
+      source = replaceExact(
+        source,
+        runtimeSource,
+        `${runtimeVariable}=\`app\`/*${ONBOARDING_OVERRIDE_RUNTIME_MARKER}*/`,
+        "onboarding runtime override",
+        appInitialPath,
+      );
+    }
+  } else {
+    const brandedRuntimePattern = new RegExp(
+      "([A-Za-z_$][\\\\w$]*)=\\`app\\`/\\*"
+        + ONBOARDING_OVERRIDE_RUNTIME_MARKER
+        + "\\*/",
+    );
+    const brandedRuntimeMatch = source.match(brandedRuntimePattern);
+    if (brandedRuntimeMatch) {
+      source = replaceExact(
+        source,
+        brandedRuntimeMatch[0],
+        `${brandedRuntimeMatch[1]}=hh(${atomVariable})`,
+        "onboarding runtime override",
+        appInitialPath,
+      );
+    }
+    if (atomDefault === "app") {
+      source = replaceExact(
+        source,
+        atomSource,
+        `${atomVariable}=bh(\`electron:onboarding-override\`,\`auto\`)`,
+        "onboarding override default",
+        appInitialPath,
+      );
+    }
+  }
+  writeIfChanged(appInitialPath, source);
+  return relPath(appInitialPath);
 }
 
 function patchAppBrandIcon(platform) {
@@ -1168,8 +1255,8 @@ async function main() {
       const invalidConfigRepairReady = !config.defaultConfig.repairInvalidUtf8OnStartup
         || bootstrap.includes("forgecode-repair-invalid-config-utf8");
       const startupHomeInitializationReady = bootstrap.includes(
-        homeInitialization.resourceDirectoryName,
-      ) && bootstrap.includes(homeInitialization.aclScriptFileName);
+        config.homeInitialization.resourceDirectoryName,
+      ) && bootstrap.includes(config.homeInitialization.aclScriptFileName);
       const mainName = fs.readdirSync(buildDir).find((file) => {
         if (!/^main-.*\.js$/.test(file)) return false;
         const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
@@ -1198,6 +1285,14 @@ async function main() {
       const appInitial = appInitialName
         ? fs.readFileSync(path.join(asarDir, "webview", "assets", appInitialName), "utf-8")
         : "";
+      const onboardingSkipReady = config.ui.skipOnboarding
+        ? onboarding.includes("__forgecodeOnboardingSkipped")
+        : !onboarding.includes("__forgecodeOnboardingSkipped");
+      const rendererOnboardingSkipReady = config.ui.skipOnboarding
+        ? appInitial.includes(ONBOARDING_OVERRIDE_RUNTIME_MARKER)
+          && appInitial.includes("electron:onboarding-override`,`app`")
+        : !appInitial.includes(ONBOARDING_OVERRIDE_RUNTIME_MARKER)
+          && appInitial.includes("electron:onboarding-override`,`auto`");
       const rendererAppBrand = findRendererAppBrand(appInitial)?.[2] ?? null;
       const rendererProductMode = findRendererProductMode(appInitial)?.fixedMode ?? null;
       const rendererDetailMode = findRendererDetailMode(appInitial)?.currentMode ?? null;
@@ -1259,7 +1354,8 @@ async function main() {
             && mainSource.includes("appId:`" + windowsBranding.appUserModelId + "`")))
         && sqlite.includes(config.devDatabaseFileName)
         && sqlite.includes(config.homeDirectoryName)
-        && onboarding.includes("__forgecodeOnboardingSkipped")
+        && onboardingSkipReady
+        && rendererOnboardingSkipReady
         && onboarding.includes("Customize " + config.appName)
         && onboarding.includes('"data-branding-onboarding-header-icon":!0')
         && onboarding.includes("src:`./" + TITLEBAR_ICON_FILE_NAME + "`")
@@ -1281,6 +1377,7 @@ async function main() {
     const runtimeIconPath = await patchWindowsRuntimeIcon(target);
     if (runtimeIconPath) console.log(`  [${target}] ${runtimeIconPath}`);
     console.log(`  [${target}] ${patchOnboarding(target)}`);
+    console.log(`  [${target}] ${patchRendererOnboardingOverride(target)}`);
     console.log(`  [${target}] ${patchRendererAppBrand(target)}`);
     console.log(`  [${target}] ${patchRendererProjectSourceBrandName(target)}`);
     console.log(`  [${target}] ${patchRendererProductMode(target)}`);
