@@ -197,14 +197,17 @@ function patchMainProcess(platform) {
   const brandedWindowsTrayGuid = "case n.js.Prod:return`" + windowsBranding.trayGuid + "`";
   const brandedAppDataPath = "a.app.setPath(`appData`,o.join(a.app.getPath(`appData`),`..`,`" + config.appName + "`))";
   const brandedCodeHome = config.homeDirectoryName;
+  const homeInitialization = config.homeInitialization;
+  const bundledMcpServer = config.bundledMcpServer;
   const invalidConfigRepairMarker = "forgecode-repair-invalid-config-utf8";
   const invalidConfigRepair = config.defaultConfig.repairInvalidUtf8OnStartup
     ? "let n=o.join(t,`config.toml`),r=c.existsSync(n)?c.readFileSync(n):null;if(r&&!require(`node:buffer`).isUtf8(r)){let e=Buffer.from(r.toString(`latin1`).split(/\\r?\\n/).filter(e=>!e.trimStart().startsWith(`#`)).join(`\\n`),`latin1`);require(`node:buffer`).isUtf8(e)&&c.writeFileSync(n,e)/*" + invalidConfigRepairMarker + "*/}"
     : "";
   const homeMigrationPrefix = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`";
+  const startupHomeInitialization = "let seedRoot=o.join(process.resourcesPath,`" + homeInitialization.resourceDirectoryName + "`);if(c.existsSync(seedRoot)){let copyTree=(source,target)=>{c.mkdirSync(target,{recursive:!0});for(let entry of c.readdirSync(source,{withFileTypes:!0})){let sourcePath=o.join(source,entry.name),targetPath=o.join(target,entry.name);entry.isDirectory()?copyTree(sourcePath,targetPath):c.existsSync(targetPath)||c.copyFileSync(sourcePath,targetPath)}};copyTree(o.join(seedRoot,`" + config.dataDirectoryName + "`),o.join(t,`" + config.dataDirectoryName + "`));copyTree(o.join(seedRoot,`" + config.toolsDirectoryName + "`),o.join(t,`" + config.toolsDirectoryName + "`));let authPath=o.join(t,`" + homeInitialization.authFileName + "`),configPath=o.join(t,`" + homeInitialization.configFileName + "`);c.existsSync(authPath)||c.copyFileSync(o.join(seedRoot,`" + homeInitialization.authFileName + "`),authPath);if(!c.existsSync(configPath)){let configText=c.readFileSync(o.join(seedRoot,`" + homeInitialization.configFileName + "`),`utf8`).replaceAll(`__BRANDING_HOME_TOOLS__`,o.join(t,`" + config.toolsDirectoryName + "`).split(`\\\\`).join(`\\\\\\\\`)).replaceAll(`.forgecode`,`" + brandedCodeHome + "`);c.writeFileSync(configPath,configText,`utf8`)}let markerPath=o.join(t,`" + homeInitialization.markerFileName + "`);if(!c.existsSync(markerPath)){let localAppData=process.env.LOCALAPPDATA||o.join(require(`node:os`).homedir(),`AppData`,`Local`),packageRoot=o.join(t,`" + config.toolsDirectoryName + "`,`" + bundledMcpServer.cwdPath + "`),stateRoot=o.join(localAppData,`" + bundledMcpServer.stateDirectoryName + "`),powershell=process.env.SystemRoot?o.join(process.env.SystemRoot,`System32`,`WindowsPowerShell`,`v1.0`,`powershell.exe`):`powershell.exe`,aclResult=u.spawnSync(powershell,[`-NoLogo`,`-NoProfile`,`-NonInteractive`,`-ExecutionPolicy`,`Bypass`,`-File`,o.join(seedRoot,`" + homeInitialization.aclScriptFileName + "`),`-PackageRoot`,packageRoot,`-StateRoot`,stateRoot],{encoding:`utf8`,windowsHide:!0});if(aclResult.status===0)c.writeFileSync(markerPath,`1`,`utf8`);else console.warn(`" + homeInitialization.failureMessage.replaceAll("`", "\\`") + "`)}}";
   const homeMigration = "(()=>{let e=o.join(require(`node:os`).homedir(),`.forgecode`),t=o.join(require(`node:os`).homedir(),`"
     + brandedCodeHome + "`);process.env.CODEX_HOME=t,delete process.env.CODEX_ELECTRON_USER_DATA_PATH;try{c.mkdirSync(t,{recursive:!0});for(let n of [`auth.json`,`config.toml`]){let r=o.join(t,n);c.existsSync(r)||c.existsSync(o.join(e,n))&&(n===`config.toml`?c.writeFileSync(r,c.readFileSync(o.join(e,n),`utf8`).replaceAll(`.forgecode`,`"
-    + brandedCodeHome + "`),`utf8`):c.copyFileSync(o.join(e,n),r))}" + invalidConfigRepair + "}catch(e){}})()";
+    + brandedCodeHome + "`),`utf8`):c.copyFileSync(o.join(e,n),r))}" + startupHomeInitialization + invalidConfigRepair + "}catch(e){}})()";
   const upstreamSingleInstanceExit = "if(!(!$||a.app.requestSingleInstanceLock()))";
   const brandedSingleInstanceExit = "if(!(!$||!0))";
   const previousAppNameForBuildFlavor = "n===`dev`?`ForgeCode (Dev)`:`ForgeCode`";
@@ -1164,6 +1167,9 @@ async function main() {
       const bootstrap = bootstrapName ? fs.readFileSync(path.join(buildDir, bootstrapName), "utf-8") : "";
       const invalidConfigRepairReady = !config.defaultConfig.repairInvalidUtf8OnStartup
         || bootstrap.includes("forgecode-repair-invalid-config-utf8");
+      const startupHomeInitializationReady = bootstrap.includes(
+        homeInitialization.resourceDirectoryName,
+      ) && bootstrap.includes(homeInitialization.aclScriptFileName);
       const mainName = fs.readdirSync(buildDir).find((file) => {
         if (!/^main-.*\.js$/.test(file)) return false;
         const source = fs.readFileSync(path.join(buildDir, file), "utf-8");
@@ -1247,6 +1253,7 @@ async function main() {
         && bootstrap.includes(config.devAppName)
         && bootstrap.includes(windowsBranding.appUserModelId)
         && invalidConfigRepairReady
+        && startupHomeInitializationReady
         && (target !== "win"
           || (mainSource.includes("setAppDetails")
             && mainSource.includes("appId:`" + windowsBranding.appUserModelId + "`")))

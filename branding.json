@@ -87,6 +87,14 @@
   "homeDirectoryName": ".aigeek",
   "dataDirectoryName": "data",
   "toolsDirectoryName": "tools",
+  "homeInitialization": {
+    "resourceDirectoryName": "home-seed",
+    "authFileName": "auth.json",
+    "configFileName": "config.toml",
+    "aclScriptFileName": "secure-private-package.ps1",
+    "markerFileName": ".initialization-complete",
+    "failureMessage": "IDP 用户目录初始化失败，将在下次启动重试。"
+  },
   "bundledMcpServer": {
     "section": "s3d-local",
     "commandPath": "package\\mcp\\s3d-mcp.exe",

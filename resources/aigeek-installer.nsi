@@ -4,8 +4,6 @@ SetCompressor /FINAL zlib
 SetDatablockOptimize on
 
 !include "MUI2.nsh"
-!include "StrFunc.nsh"
-${Using:StrFunc} StrRep
 
 !ifndef PRODUCT_NAME
 !error "PRODUCT_NAME must be supplied by the branding build configuration"
@@ -19,31 +17,12 @@ ${Using:StrFunc} StrRep
 !ifndef APP_USER_MODEL_ID
 !error "APP_USER_MODEL_ID must be supplied by the branding build configuration"
 !endif
-!ifndef HOME_DIRECTORY_NAME
-!error "HOME_DIRECTORY_NAME must be supplied by the branding build configuration"
-!endif
 !ifndef EXECUTABLE_NAME
 !error "EXECUTABLE_NAME must be supplied by the branding build configuration"
 !endif
 !ifndef LEGACY_PRODUCT_NAME
 !define LEGACY_PRODUCT_NAME ""
 !endif
-!ifndef TOOLS_DIRECTORY_NAME
-!error "TOOLS_DIRECTORY_NAME must be supplied by the branding build configuration"
-!endif
-!ifndef MCP_PACKAGE_PATH
-!error "MCP_PACKAGE_PATH must be supplied by the branding build configuration"
-!endif
-!ifndef MCP_STATE_DIRECTORY_NAME
-!error "MCP_STATE_DIRECTORY_NAME must be supplied by the branding build configuration"
-!endif
-!ifndef PRIVATE_PACKAGE_ACL_SCRIPT
-!error "PRIVATE_PACKAGE_ACL_SCRIPT must be supplied by the branding build configuration"
-!endif
-!ifndef DATA
-!error "DATA must be supplied by the branding build configuration"
-!endif
-
 Name "${PRODUCT_NAME}"
 OutFile "${OUTFILE}"
 InstallDir "$LOCALAPPDATA\${PRODUCT_NAME}"
@@ -73,30 +52,6 @@ done:
   Delete "$SMPROGRAMS\${LEGACY_PRODUCT_NAME} Studio\${LEGACY_PRODUCT_NAME}.lnk"
 FunctionEnd
 
-Function SeedDefaultConfig
-  FileOpen $0 "$PLUGINSDIR\default-config.toml" r
-  IfErrors seed_config_failed
-  FileOpen $1 "$PROFILE\${HOME_DIRECTORY_NAME}\config.toml" w
-  IfErrors seed_config_failed
-  ; TOML basic strings require Windows separators to be escaped as `\\`.
-  StrCpy $4 "$PROFILE\${HOME_DIRECTORY_NAME}\${TOOLS_DIRECTORY_NAME}"
-  ${StrRep} $5 $4 "\" "\\"
-seed_config_read:
-  ClearErrors
-  FileRead $0 $2
-  IfErrors seed_config_done
-  ${StrRep} $3 $2 "__BRANDING_HOME_TOOLS__" $5
-  FileWrite $1 $3
-  Goto seed_config_read
-seed_config_done:
-  FileClose $0
-  FileClose $1
-  Return
-seed_config_failed:
-  MessageBox MB_ICONSTOP "${PRODUCT_NAME} 默认配置文件无法释放。"
-  Abort
-FunctionEnd
-
 Section "Install"
   ; The app payload was compressed by 7-Zip with parallel LZMA2. Keep it
   ; uncompressed in the NSIS wrapper, then unpack it into the install folder.
@@ -106,9 +61,6 @@ Section "Install"
   File /oname=7z.exe "${SEVENZIP}"
   File /oname=7z.dll "${SEVENZIP_DLL}"
   File /oname=payload.7z "${PAYLOAD}"
-  File /oname=default-auth.json "${DEFAULT_AUTH}"
-  File /oname=default-config.toml "${DEFAULT_CONFIG}"
-  File /oname=secure-private-package.ps1 "${PRIVATE_PACKAGE_ACL_SCRIPT}"
   SetCompress auto
 
   SetOutPath "$INSTDIR"
@@ -120,30 +72,6 @@ Section "Install"
   MessageBox MB_ICONSTOP "${PRODUCT_NAME} files could not be unpacked (error $0)."
   Abort
 payload_extracted:
-  ; Seed the independent CLI home only once. Existing credentials and settings
-  ; belong to the user and must survive installation and upgrades unchanged.
-  CreateDirectory "$PROFILE\${HOME_DIRECTORY_NAME}"
-  ; Release bundled data without replacing any file already present in the
-  ; user's home. Missing files are still added during upgrades.
-  SetOverwrite off
-  SetOutPath "$PROFILE\${HOME_DIRECTORY_NAME}"
-  File /r "${DATA}\*.*"
-  SetOverwrite on
-  SetOutPath "$PROFILE\${HOME_DIRECTORY_NAME}\${TOOLS_DIRECTORY_NAME}"
-  File /r "${TOOLS}\*.*"
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\secure-private-package.ps1" -PackageRoot "$PROFILE\${HOME_DIRECTORY_NAME}\${TOOLS_DIRECTORY_NAME}\${MCP_PACKAGE_PATH}" -StateRoot "$LOCALAPPDATA\${MCP_STATE_DIRECTORY_NAME}"'
-  Pop $0
-  Pop $1
-  StrCmp $0 0 package_acl_secured
-  MessageBox MB_ICONSTOP "${PRODUCT_NAME} MCP 安全权限初始化失败（错误 $0）。$\r$\n$1"
-  Abort
-package_acl_secured:
-  IfFileExists "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json" auth_exists
-  CopyFiles /SILENT "$PLUGINSDIR\default-auth.json" "$PROFILE\${HOME_DIRECTORY_NAME}\auth.json"
-auth_exists:
-  IfFileExists "$PROFILE\${HOME_DIRECTORY_NAME}\config.toml" config_exists
-  Call SeedDefaultConfig
-config_exists:
   WriteRegStr HKCU "Software\${PRODUCT_NAME}" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayName" "${PRODUCT_NAME}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "Publisher" "${PRODUCT_PUBLISHER}"

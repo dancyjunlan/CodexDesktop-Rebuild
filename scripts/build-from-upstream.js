@@ -23,6 +23,7 @@ const {
   windowsExecutableBaseName,
 } = require("./branding-config");
 const { syncBrandingMetadata } = require("./sync-branding-metadata");
+const { prepareHomeConfig } = require("./prepare-home-config");
 
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
 const OUT_DIR = path.join(PROJECT_ROOT, "out");
@@ -242,6 +243,45 @@ function patchWindowsRuntimeIdentity(resourcesDir) {
   }
 }
 
+function stageWindowsHomeInitializationAssets(outApp) {
+  const sourcePaths = {
+    data: path.join(PROJECT_ROOT, branding.dataDirectoryName),
+    tools: path.join(PROJECT_ROOT, branding.toolsDirectoryName),
+    auth: path.join(PROJECT_ROOT, "auth.json"),
+    config: path.join(PROJECT_ROOT, "config.toml"),
+    aclScript: path.join(PROJECT_ROOT, "resources", "secure-private-package.ps1"),
+  };
+  for (const [name, sourcePath] of Object.entries(sourcePaths)) {
+    const expectedType = name === "data" || name === "tools" ? "directory" : "file";
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error(`Windows home initialization ${expectedType} is missing: ${sourcePath}`);
+    }
+    if (expectedType === "directory" && !fs.statSync(sourcePath).isDirectory()) {
+      throw new Error(`Windows home initialization source is not a directory: ${sourcePath}`);
+    }
+  }
+
+  const initialization = branding.homeInitialization;
+  const seedRoot = path.join(outApp, "resources", initialization.resourceDirectoryName);
+  fs.mkdirSync(seedRoot, { recursive: true });
+  fs.cpSync(sourcePaths.data, path.join(seedRoot, branding.dataDirectoryName), {
+    recursive: true,
+    force: true,
+  });
+  fs.cpSync(sourcePaths.tools, path.join(seedRoot, branding.toolsDirectoryName), {
+    recursive: true,
+    force: true,
+  });
+  fs.copyFileSync(sourcePaths.auth, path.join(seedRoot, initialization.authFileName));
+  prepareHomeConfig({
+    sourcePath: sourcePaths.config,
+    destinationPath: path.join(seedRoot, initialization.configFileName),
+    branding,
+  });
+  fs.copyFileSync(sourcePaths.aclScript, path.join(seedRoot, initialization.aclScriptFileName));
+  console.log(`   [home] staged per-user initialization assets in resources/${initialization.resourceDirectoryName}`);
+}
+
 // ─── macOS build ────────────────────────────────────────────────
 
 function buildMac(platform) {
@@ -390,6 +430,8 @@ async function buildWin(platform) {
     packAsar(asarDir, asarPath),
   ]);
   console.log(`   [copy] completed ${copied} files`);
+
+  stageWindowsHomeInitializationAssets(outApp);
 
   const windowsIconPath = iconPath("windows");
   const upstreamRuntimeExe = path.join(outApp, "ChatGPT.exe");

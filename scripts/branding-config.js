@@ -49,6 +49,29 @@ function requireBranding() {
   if (path.isAbsolute(branding.toolsDirectoryName) || branding.toolsDirectoryName.includes("..")) {
     throw new Error("branding.json: toolsDirectoryName must be a relative directory name");
   }
+  for (const name of [
+    "resourceDirectoryName",
+    "authFileName",
+    "configFileName",
+    "aclScriptFileName",
+    "markerFileName",
+    "failureMessage",
+  ]) {
+    requireString(branding.homeInitialization?.[name], `homeInitialization.${name}`);
+  }
+  if (
+    path.isAbsolute(branding.homeInitialization.resourceDirectoryName) ||
+    branding.homeInitialization.resourceDirectoryName.includes("..") ||
+    /[\\/]/.test(branding.homeInitialization.resourceDirectoryName)
+  ) {
+    throw new Error("branding.json: homeInitialization.resourceDirectoryName must be a directory name");
+  }
+  for (const name of ["authFileName", "configFileName", "aclScriptFileName", "markerFileName"]) {
+    const value = branding.homeInitialization[name];
+    if (path.isAbsolute(value) || value.includes("..") || /[\\/]/.test(value)) {
+      throw new Error(`branding.json: homeInitialization.${name} must be a file name`);
+    }
+  }
   for (const name of ["section", "commandPath", "cwdPath", "stateDirectoryName"]) {
     requireString(branding.bundledMcpServer?.[name], `bundledMcpServer.${name}`);
   }
