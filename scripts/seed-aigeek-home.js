@@ -73,8 +73,15 @@ if (!fs.existsSync(configTarget) && fs.existsSync(sourceConfig)) {
 
 const authFileName = branding.homeInitialization.authFileName;
 const authSource = path.join(sourceDir, authFileName);
+const authSeedSource = path.join(projectRoot, authFileName);
 const authTarget = path.join(targetDir, authFileName);
-if (!fs.existsSync(authTarget) && fs.existsSync(authSource)) {
-  fs.copyFileSync(authSource, authTarget);
-  console.log(`[branding-home] seeded ${authFileName}`);
+const seedAuthPath = fs.existsSync(authSeedSource) ? authSeedSource : authSource;
+const shouldRefreshAuth = fs.existsSync(seedAuthPath)
+  && (!fs.existsSync(authTarget)
+    || (fs.existsSync(authSource)
+      && Buffer.compare(fs.readFileSync(authTarget), fs.readFileSync(authSource)) === 0
+      && Buffer.compare(fs.readFileSync(authTarget), fs.readFileSync(seedAuthPath)) !== 0));
+if (shouldRefreshAuth) {
+  fs.copyFileSync(seedAuthPath, authTarget);
+  console.log(`[branding-home] synchronized ${authFileName}`);
 }
