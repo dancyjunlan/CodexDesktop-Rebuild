@@ -29,7 +29,43 @@ function replaceTomlKeyInSection(source, sectionName, key, value) {
   return source.slice(0, sectionStart) + updatedSection + source.slice(sectionEnd);
 }
 
-function prepareHomeConfig({ sourcePath, destinationPath, branding }) {
+function extractMcpServerSections(source, sectionName) {
+  const rootHeader = `mcp_servers.${sectionName}`;
+  const lines = source.split(/\r?\n/);
+  const sectionLines = [];
+  let collecting = false;
+
+  for (const line of lines) {
+    const header = line.match(/^\s*\[([^\]]+)\]\s*$/)?.[1];
+    if (header) {
+      const belongsToServer = header === rootHeader || header.startsWith(`${rootHeader}.`);
+      if (collecting && !belongsToServer) break;
+      if (belongsToServer) collecting = true;
+    }
+    if (collecting) sectionLines.push(line);
+  }
+
+  return sectionLines.join("\n").replace(/\n+$/, "");
+}
+
+function hasMcpServerSection(source, sectionName) {
+  const rootHeader = `[mcp_servers.${sectionName}]`;
+  return source.split(/\r?\n/).some((line) => line.trim() === rootHeader);
+}
+
+function appendMissingMcpServerConfig(source, seedConfig, sectionName) {
+  if (hasMcpServerSection(source, sectionName)) return source;
+
+  const sections = extractMcpServerSections(seedConfig, sectionName);
+  if (!sections) return source;
+
+  const newline = source.includes("\r\n") ? "\r\n" : "\n";
+  const normalizedSections = sections.replaceAll("\n", newline);
+  const separator = source.length === 0 || source.endsWith(newline) ? "" : newline;
+  return `${source}${separator}${newline}${normalizedSections}${newline}`;
+}
+
+function prepareHomeConfigText({ sourcePath, branding }) {
   const mcp = branding.bundledMcpServer;
   const toTomlPath = (relativePath) =>
     `${HOME_TOOLS_TOKEN}\\\\${relativePath.replaceAll("\\", "\\\\")}`;
@@ -44,7 +80,18 @@ function prepareHomeConfig({ sourcePath, destinationPath, branding }) {
   if (branding.defaultConfig.stripInstallerComments) {
     config = config.split(/\r?\n/).filter((line) => !/^\s*#/.test(line)).join("\n");
   }
-  fs.writeFileSync(destinationPath, config, "utf-8");
+  return config;
 }
 
-module.exports = { HOME_TOOLS_TOKEN, prepareHomeConfig };
+function prepareHomeConfig({ sourcePath, destinationPath, branding }) {
+  fs.writeFileSync(destinationPath, prepareHomeConfigText({ sourcePath, branding }), "utf-8");
+}
+
+module.exports = {
+  HOME_TOOLS_TOKEN,
+  appendMissingMcpServerConfig,
+  extractMcpServerSections,
+  hasMcpServerSection,
+  prepareHomeConfig,
+  prepareHomeConfigText,
+};

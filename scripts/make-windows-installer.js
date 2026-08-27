@@ -8,6 +8,7 @@ const {
   iconPath,
   windowsExecutableBaseName,
 } = require("./branding-config");
+const { prepareHomeConfig } = require("./prepare-home-config");
 
 const root = PROJECT_ROOT;
 const windowsBranding = branding.windows;
@@ -40,6 +41,46 @@ if (!nsis) {
   throw new Error("NSIS was not found. Install it with: winget install NSIS.NSIS");
 }
 if (!fs.existsSync(installerScript)) throw new Error("NSIS installer script is missing.");
+
+function syncHomeSeedAssets() {
+  const sourcePaths = {
+    data: path.join(root, branding.dataDirectoryName),
+    tools: path.join(root, branding.toolsDirectoryName),
+    auth: path.join(root, branding.homeInitialization.authFileName),
+    config: path.join(root, branding.homeInitialization.configFileName),
+    aclScript: path.join(root, "resources", branding.homeInitialization.aclScriptFileName),
+  };
+  for (const [name, sourcePath] of Object.entries(sourcePaths)) {
+    const expectedType = name === "data" || name === "tools" ? "directory" : "file";
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error(`Windows home initialization ${expectedType} is missing: ${sourcePath}`);
+    }
+    if (expectedType === "directory" && !fs.statSync(sourcePath).isDirectory()) {
+      throw new Error(`Windows home initialization source is not a directory: ${sourcePath}`);
+    }
+  }
+
+  fs.mkdirSync(homeSeedPath, { recursive: true });
+  for (const directoryName of [branding.dataDirectoryName, branding.toolsDirectoryName]) {
+    const destinationPath = path.join(homeSeedPath, directoryName);
+    fs.rmSync(destinationPath, { recursive: true, force: true });
+    fs.cpSync(sourcePaths[directoryName], destinationPath, { recursive: true, force: true });
+  }
+  fs.copyFileSync(sourcePaths.auth, path.join(homeSeedPath, branding.homeInitialization.authFileName));
+  prepareHomeConfig({
+    sourcePath: sourcePaths.config,
+    destinationPath: path.join(homeSeedPath, branding.homeInitialization.configFileName),
+    branding,
+  });
+  fs.copyFileSync(
+    sourcePaths.aclScript,
+    path.join(homeSeedPath, branding.homeInitialization.aclScriptFileName),
+  );
+  console.log("[installer] synchronized current home initialization assets");
+}
+
+syncHomeSeedAssets();
+
 for (const relativePath of [
   branding.dataDirectoryName,
   branding.toolsDirectoryName,
