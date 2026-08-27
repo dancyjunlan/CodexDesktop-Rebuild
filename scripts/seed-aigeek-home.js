@@ -33,6 +33,24 @@ function copyTreeMissing(source, target) {
   return copied;
 }
 
+function replaceTreeIfOlder(source, target) {
+  if (!fs.existsSync(source)) return false;
+  if (fs.existsSync(target) && fs.statSync(target).mtimeMs >= fs.statSync(source).mtimeMs) {
+    return false;
+  }
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.cpSync(source, target, { recursive: true, force: true });
+  return true;
+}
+
+const projectToolsDirectory = path.join(projectRoot, branding.toolsDirectoryName);
+const targetToolsDirectory = path.join(targetDir, branding.toolsDirectoryName);
+const packageSource = path.join(projectToolsDirectory, branding.bundledMcpServer.cwdPath);
+const packageTarget = path.join(targetToolsDirectory, branding.bundledMcpServer.cwdPath);
+if (replaceTreeIfOlder(packageSource, packageTarget)) {
+  console.log(`[branding-home] synchronized ${branding.toolsDirectoryName}/${branding.bundledMcpServer.cwdPath}`);
+}
+
 for (const directoryName of [branding.dataDirectoryName, branding.toolsDirectoryName]) {
   const copied = copyTreeMissing(
     path.join(projectRoot, directoryName),
@@ -53,10 +71,13 @@ const sourceConfig = fs.existsSync(projectConfig)
   ? projectConfig
   : path.join(sourceDir, branding.homeInitialization.configFileName);
 const configTarget = path.join(targetDir, branding.homeInitialization.configFileName);
-if (!fs.existsSync(configTarget) && fs.existsSync(sourceConfig)) {
+const configIsOlder = fs.existsSync(sourceConfig)
+  && (!fs.existsSync(configTarget)
+    || fs.statSync(configTarget).mtimeMs < fs.statSync(sourceConfig).mtimeMs);
+if (configIsOlder) {
   const config = prepareConfigForHome(sourceConfig);
   fs.writeFileSync(configTarget, config, "utf-8");
-  console.log(`[branding-home] seeded ${branding.homeInitialization.configFileName}`);
+  console.log(`[branding-home] synchronized ${branding.homeInitialization.configFileName}`);
 } else if (fs.existsSync(configTarget) && fs.existsSync(projectConfig)) {
   const current = fs.readFileSync(configTarget, "utf-8");
   const seed = prepareConfigForHome(projectConfig);
@@ -78,9 +99,7 @@ const authTarget = path.join(targetDir, authFileName);
 const seedAuthPath = fs.existsSync(authSeedSource) ? authSeedSource : authSource;
 const shouldRefreshAuth = fs.existsSync(seedAuthPath)
   && (!fs.existsSync(authTarget)
-    || (fs.existsSync(authSource)
-      && Buffer.compare(fs.readFileSync(authTarget), fs.readFileSync(authSource)) === 0
-      && Buffer.compare(fs.readFileSync(authTarget), fs.readFileSync(seedAuthPath)) !== 0));
+    || fs.statSync(authTarget).mtimeMs < fs.statSync(seedAuthPath).mtimeMs);
 if (shouldRefreshAuth) {
   fs.copyFileSync(seedAuthPath, authTarget);
   console.log(`[branding-home] synchronized ${authFileName}`);
